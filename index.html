@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e5a8a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="車輛管理">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>車輛管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== 長輩友善：大字、高對比、大按鈕 ===== */
+:root{
+  --paper:#eef1f4; --card:#ffffff; --ink:#0f1a24; --mute:#3b4855; --line:#b4bfca;
+  --brand:#0b4f7c; --brand-soft:#d6e8f4;
+  --amber:#874800; --amber-soft:#fde9c4;
+  --red:#a31d0b; --red-soft:#fcdcd6;
+  --green:#136338; --green-soft:#d2eedd;
+  --plate-font:"Barlow Condensed","Arial Narrow",sans-serif;
+  --r-sm:8px; --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#10161c; --card:#1b242d; --ink:#f3f6f9; --mute:#bfcad4; --line:#3d4a58;
+    --brand:#86c8f2; --brand-soft:#173a52;
+    --amber:#ffc266; --amber-soft:#3d2b0c;
+    --red:#ff9c8f; --red-soft:#461b1b;
+    --green:#7fe0ad; --green-soft:#153826;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  color:var(--ink);
+  font:15px/1.65 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;
+  padding-bottom:calc(82px + env(safe-area-inset-bottom,0px));
+}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.c-green{color:var(--green);font-weight:700}
+.c-red{color:var(--red);font-weight:700}
+.c-amber{color:var(--amber);font-weight:700}
+
+/* 頂部 */
+header{
+  position:sticky;top:0;z-index:5;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 12px;
+  display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);
+}
+header h1{font-size:21px;margin:0;flex:1;line-height:1.2}
+.hbtn{border:2px solid var(--line);background:var(--card);border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;min-height:40px}
+.hbtn svg{width:20px;height:20px}
+.icon-btn{border:0;background:transparent;padding:10px;border-radius:50%;display:grid;place-items:center;min-width:48px;min-height:40px}
+.icon-btn svg{width:28px;height:28px}
+.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin svg{animation:none}}
+
+main{padding:14px 16px 28px;max-width:720px;margin:0 auto}
+
+/* 車牌 */
+.plate{
+  display:inline-flex;align-items:center;gap:.35em;
+  font:700 21px/1 var(--plate-font);letter-spacing:.06em;
+  background:#fff;color:#0f1a24;border:2.5px solid #0f1a24;border-radius:6px;
+  padding:5px 12px 4px;white-space:nowrap;
+}
+.plate::before,.plate::after{content:"";width:6px;height:6px;border-radius:50%;background:#0f1a24;opacity:.55}
+.plate.none{border-style:dashed;color:#56626e;border-color:#56626e;font-size:14px;letter-spacing:.02em;font-family:inherit;font-weight:700;background:var(--card)}
+.plate.none::before,.plate.none::after{display:none}
+.plate.lg{font-size:33px;padding:9px 18px 7px;border-width:3px}
+
+/* 搜尋 */
+.search{position:relative;margin:0 0 14px}
+.search input{width:100%;padding:16px 16px 16px 52px;border:2px solid var(--line);border-radius:var(--r);background:var(--card);font-size:16px}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:26px;height:26px;color:var(--mute)}
+
+/* 篩選 */
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:2px 0 14px}
+.chip{border:2px solid var(--line);background:var(--card);border-radius:999px;padding:8px 18px;white-space:nowrap;font-size:14px;min-height:40px}
+.chip[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:700}
+@media (prefers-color-scheme: dark){.chip[aria-pressed="true"]{color:#0f1a24}}
+
+/* 提醒框 */
+.alert{border:2px solid var(--amber);border-left-width:8px;background:var(--amber-soft);padding:14px 16px;border-radius:var(--r-sm);margin-bottom:16px;font-size:15px}
+.alert b{color:var(--amber)}
+.alert ul{margin:8px 0 0;padding-left:22px}
+
+.summary{display:flex;flex-wrap:wrap;gap:6px 20px;color:var(--mute);font-size:14px;margin:0 0 12px}
+.summary strong{color:var(--ink);font-size:20px;margin-right:3px}
+
+/* 列表 */
+.list{display:flex;flex-direction:column;gap:12px}
+.item{display:block;width:100%;text-align:left;border:2px solid var(--line);background:var(--card);border-radius:var(--r);padding:14px;cursor:pointer}
+.item-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.item h3{margin:0;font-size:18px;line-height:1.3}
+.item .sub{color:var(--mute);font-size:14px;margin-top:2px}
+.tag{font-size:13px;font-weight:500;padding:3px 10px;border-radius:6px;background:var(--brand-soft);color:var(--brand);white-space:nowrap}
+.tag.amber{background:var(--amber-soft);color:var(--amber);font-weight:700}
+.tag.red{background:var(--red-soft);color:var(--red);font-weight:700}
+.tag.green{background:var(--green-soft);color:var(--green);font-weight:700}
+.tag.gray{background:var(--paper);color:var(--mute);border:1px solid var(--line)}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+
+.steps-mini{display:flex;gap:4px;margin:14px 0 8px}
+.steps-mini i{flex:1;height:10px;border-radius:3px;background:var(--line)}
+.steps-mini i.on{background:var(--brand)}
+.next{font-size:16px;font-weight:700;color:var(--brand)}
+.next.ready{color:var(--green)}
+
+.renew-line{font-size:15px;margin-top:10px;line-height:1.5}
+.renew-line.big{font-size:17px;margin-top:0}
+.call{display:inline-flex;align-items:center;gap:6px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:12px;min-height:40px}
+@media (prefers-color-scheme: dark){.call{color:#0f1a24}}
+.call svg{width:22px;height:22px}
+
+.empty{text-align:center;color:var(--mute);padding:48px 16px;font-size:15px}
+.empty button{margin-top:14px}
+
+/* 新增按鈕 */
+.fab{
+  position:fixed;right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:6;
+  border:0;background:var(--brand);color:#fff;border-radius:18px;
+  padding:16px 22px;font-weight:700;font-size:15px;display:flex;gap:8px;align-items:center;
+  box-shadow:0 6px 18px rgba(11,79,124,.4);
+}
+@media (prefers-color-scheme: dark){.fab{color:#0f1a24}}
+.fab svg{width:24px;height:24px}
+.fab[hidden]{display:none}
+
+/* 底部導覽 */
+nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:7;background:var(--card);border-top:2px solid var(--line);
+  display:grid;grid-template-columns:repeat(5,1fr);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+nav button{border:0;background:none;padding:10px 0 12px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:13px;font-weight:500;color:var(--mute);position:relative;min-height:60px}
+nav button svg{width:24px;height:24px}
+nav button[aria-current="page"]{color:var(--brand);font-weight:700;background:var(--brand-soft)}
+nav .dot{position:absolute;top:6px;left:calc(50% + 10px);min-width:22px;height:22px;border-radius:11px;background:var(--red);color:#fff;font-size:13px;font-weight:700;line-height:22px;padding:0 5px}
+
+/* 全螢幕面板 */
+.panel{
+  position:fixed;inset:0;z-index:20;overflow-y:auto;
+  padding:calc(env(safe-area-inset-top,0px)) 0 calc(env(safe-area-inset-bottom,0px) + 28px);
+  transform:translateY(100%);transition:transform .22s ease-out;visibility:hidden;
+}
+.panel.open{transform:none;visibility:visible}
+@media (prefers-reduced-motion:reduce){.panel{transition:none}}
+.panel-head{position:sticky;top:0;display:flex;align-items:center;gap:8px;padding:10px 12px;z-index:2;border-bottom:2px solid var(--line)}
+.panel-head h2{flex:1;margin:0;font-size:18px}
+.panel-head .btn{padding:10px 20px;min-height:46px}
+.panel-body{padding:18px 16px;max-width:720px;margin:0 auto}
+
+.hero{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-bottom:20px}
+.hero h3{margin:4px 0 0;font-size:22px}
+
+section.block{background:var(--card);border:2px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px}
+section.block h4{margin:0 0 12px;font-size:14px;color:var(--mute);font-weight:700}
+dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0}
+dt{color:var(--mute);font-size:13px;padding-top:1px}
+dd{margin:0;word-break:break-all;font-size:16px;font-weight:500}
+.vin{font-family:var(--plate-font);font-size:18px;letter-spacing:.05em}
+.note{white-space:pre-wrap;font-size:15px}
+a.tel{color:var(--brand);font-weight:700;text-decoration:underline}
+
+.renew-box{border-left-width:8px}
+.renew-box.red{border-color:var(--red)}
+.renew-box.amber{border-color:var(--amber)}
+.renew-box.green{border-color:var(--green)}
+.log{margin:0;padding-left:22px;font-size:14px}
+.log li{margin-bottom:6px}
+
+/* 續保統計 */
+.rate-row{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.rate-label{font-size:15px;font-weight:700}
+.rate{font:700 60px/1 var(--plate-font);color:var(--brand)}
+.rate-dl{flex:1;min-width:190px}
+.rate-dl dd{font-size:17px}
+
+/* 流程清單 */
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px dashed var(--line)}
+.steps li:last-child{border-bottom:0}
+.steps .step-row{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;padding:0;text-align:left;min-height:40px}
+.steps .tick{width:32px;height:32px;flex:none;border-radius:50%;border:3px solid var(--line);background:var(--card);display:grid;place-items:center;font:700 15px var(--plate-font);color:var(--mute)}
+.steps li.done .tick{background:var(--brand);border-color:var(--brand);color:#fff}
+@media (prefers-color-scheme: dark){.steps li.done .tick{color:#0f1a24}}
+.steps li.is-next .tick{border-color:var(--brand);color:var(--brand)}
+.steps .name{flex:1;font-size:16px}
+.steps .name small{display:block;color:var(--mute);font-size:13px;line-height:1.45;margin-top:2px}
+.steps li.is-next .name{font-weight:700}
+.steps .when{color:var(--mute);font-size:13px;white-space:nowrap}
+.steps .go{background:var(--brand);color:#fff;border-radius:10px;padding:8px 16px;font-size:14px;font-weight:700}
+@media (prefers-color-scheme: dark){.steps .go{color:#0f1a24}}
+.steps input[type=date]{border:2px solid var(--line);background:var(--paper);border-radius:8px;padding:6px 8px;font-size:13px;max-width:170px}
+
+/* 表單 */
+.field{display:block;margin-bottom:12px;min-width:0}
+.field > span{display:block;font-size:14px;font-weight:500;margin-bottom:6px}
+.field input,.field textarea{width:100%;min-width:0;border:2px solid var(--line);background:var(--paper);border-radius:10px;padding:10px 12px;font-size:16px}
+.field textarea{min-height:96px;resize:vertical}
+.field .req{color:var(--red);font-size:13px;font-weight:700;margin-left:6px}
+.field.invalid input,.field.invalid textarea{border-color:var(--red);background:var(--red-soft)}
+.field.invalid .multi{outline:3px solid var(--red);outline-offset:5px;border-radius:10px}
+.multi{display:flex;flex-wrap:wrap;gap:8px}
+.pct{display:flex;align-items:center;gap:8px}
+.cash-hero{border-left:8px solid var(--green)}
+.cash-hero.low{border-color:var(--red);background:var(--red-soft)}
+.cash-amt{font:700 56px/1.05 var(--plate-font);color:var(--ink);margin:4px 0 6px}
+.cash-hero.low .cash-amt{color:var(--red)}
+.cash-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.cash-btns .btn{padding:12px 6px}
+.btn.cash-out{background:var(--red);border-color:var(--red);color:#fff}
+@media (prefers-color-scheme: dark){.btn.cash-out{color:#0f1a24}}
+.cash-sum{grid-template-columns:auto 1fr}
+.cash-sum dd{font-size:20px;font-weight:700}
+.cash-list{background:var(--card);border:2px solid var(--line);border-radius:var(--r);padding:4px 14px 8px}
+.day-head{font-weight:700;color:var(--mute);font-size:14px;padding:12px 0 4px;border-bottom:2px solid var(--line)}
+.cash-row{display:flex;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px dashed var(--line);background:none;padding:12px 0;text-align:left;min-height:56px}
+.cash-row .what{flex:1;min-width:0;font-size:16px;overflow-wrap:anywhere}
+.cash-row .what small,.cash-row .amt small{display:block;color:var(--mute);font-size:13px;font-weight:400}
+.cash-row .amt{text-align:right;white-space:nowrap}
+.cash-row .amt b{font-size:18px}
+.pays{list-style:none;margin:0;padding:0}
+.pays li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.pays li:last-child{border-bottom:0}
+.pays li span{flex:1;color:var(--mute)}
+.pays li b{font-size:16px}
+.pays li.sum span{color:var(--ink);font-weight:700}
+.pays li.sum b{font-size:18px}
+.btn.mini{min-height:38px;padding:4px 12px;font-size:13px;color:var(--red);border-color:var(--red);background:transparent}
+.summary .owe{background:var(--red-soft);color:var(--red);border:2px solid var(--red);border-radius:10px;padding:4px 14px;font-weight:700}
+.summary .owe strong{color:var(--red)}
+.summary .owe.clear{background:var(--green-soft);color:var(--green);border-color:var(--green)}
+.summary .owe.clear strong{color:var(--green)}
+.summary{align-items:center}
+.spec{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:12px 0 10px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px}
+.spec > div{min-width:0}
+.spec .full{grid-column:1/-1}
+.spec span{display:block;font-size:13px;color:var(--mute);line-height:1.3}
+.spec b{display:block;font-size:16px;line-height:1.35;word-break:break-all}
+.spec b .vin{font-size:17px}
+.spec b.none{color:var(--amber);font-weight:500}
+.pct b{font-size:18px}
+.calc{background:var(--paper);margin-top:4px}
+.field.check{display:flex;align-items:center;gap:12px;border:2px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--paper);cursor:pointer}
+.field.check > span{margin:0;font-weight:700}
+.field.check input{width:26px;height:26px;flex:none;accent-color:var(--brand);margin:0}
+.field[hidden]{display:none!important}
+.field.check.invalid{border-color:var(--red);background:var(--red-soft)}
+.grid2,.sheet-body{display:grid;grid-template-columns:1fr;gap:0}
+@media (min-width:340px){.grid2,.sheet-body{grid-template-columns:1fr 1fr;gap:0 12px}.field.wide,div.field{grid-column:1/-1}}
+
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px}
+.btn{border:2px solid var(--line);background:var(--card);border-radius:12px;padding:10px 16px;font-weight:700;font-size:15px;min-height:46px}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.good{background:var(--green);border-color:var(--green);color:#fff}
+@media (prefers-color-scheme: dark){.btn.primary,.btn.good{color:#0f1a24}}
+.btn.danger{color:var(--red);border-color:var(--red);background:transparent;margin-left:auto}
+.btn.wide{flex:1}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--ink);color:var(--paper);padding:14px 22px;border-radius:12px;z-index:50;
+  font-size:15px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center;
+}
+.toast.show{opacity:1}
+.demo{background:var(--brand-soft);color:var(--brand);font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:14px}
+.muted{color:var(--mute);font-size:13px}
+.help ol{padding-left:24px;margin:6px 0}
+
+/* 下方彈出表單 */
+.sheet{position:fixed;inset:0;z-index:30;background:rgba(10,16,22,.55);display:flex;align-items:flex-end;justify-content:center;opacity:0;visibility:hidden;transition:opacity .18s}
+.sheet.open{opacity:1;visibility:visible}
+.sheet-card{background:var(--card);width:100%;max-width:600px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:6px 18px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(24px);transition:transform .2s ease-out}
+.sheet.open .sheet-card{transform:none}
+@media (prefers-reduced-motion:reduce){.sheet,.sheet-card{transition:none}}
+.sheet-head{display:flex;align-items:center;position:sticky;top:0;background:var(--card);padding:10px 0;z-index:1}
+.sheet-head h3{flex:1;margin:0;font-size:19px}
+.sheet.open ~ .toast{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 16px)}
+
+/* ===== 背景：凹刻雪花 ===== */
+:root{--pattern:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><defs><g id='a'><path transform='rotate(0)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(60)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(120)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(180)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(240)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(300)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/></g><g id='b'><path transform='rotate(0)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(60)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(120)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(180)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(240)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(300)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/></g><g id='c'><path transform='rotate(0)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(60)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(120)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(180)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(240)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(300)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/></g><g id='d'><path transform='rotate(0)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(60)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(120)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(180)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(240)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(300)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/></g></defs><g fill='none' stroke='rgba(255,255,255,.95)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(0.9 0.9)'><use href='%23a' transform='translate(62 64) rotate(0) scale(1.000)'/><use href='%23b' transform='translate(186 156) rotate(12) scale(1.000)'/><use href='%23c' transform='translate(112 196) rotate(30) scale(1.000)'/><use href='%23c' transform='translate(206 44) rotate(20) scale(0.692)'/><use href='%23d' transform='translate(28 176) rotate(8) scale(1.000)'/><use href='%23c' transform='translate(150 92) rotate(0) scale(0.538)'/></g><g fill='none' stroke='rgba(40,62,84,.17)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 0)'><use href='%23a' transform='translate(62 64) rotate(0) scale(1.000)'/><use href='%23b' transform='translate(186 156) rotate(12) scale(1.000)'/><use href='%23c' transform='translate(112 196) rotate(30) scale(1.000)'/><use href='%23c' transform='translate(206 44) rotate(20) scale(0.692)'/><use href='%23d' transform='translate(28 176) rotate(8) scale(1.000)'/><use href='%23c' transform='translate(150 92) rotate(0) scale(0.538)'/></g></svg>");--base:linear-gradient(165deg,#f1f4f7 0%,#e4e9ef 55%,#dde3ea 100%);--glass:rgba(238,241,244,.94)}
+@media (prefers-color-scheme: dark){:root{--pattern:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'><defs><g id='a'><path transform='rotate(0)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(60)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(120)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(180)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(240)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/><path transform='rotate(300)' d='M0 0V-34.0M0 -14.3l-6.8 -6.8M0 -14.3l6.8 -6.8M0 -23.8l-4.4 -4.4M0 -23.8l4.4 -4.4'/></g><g id='b'><path transform='rotate(0)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(60)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(120)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(180)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(240)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/><path transform='rotate(300)' d='M0 0V-22.0M0 -9.2l-4.4 -4.4M0 -9.2l4.4 -4.4M0 -15.4l-2.9 -2.9M0 -15.4l2.9 -2.9'/></g><g id='c'><path transform='rotate(0)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(60)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(120)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(180)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(240)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/><path transform='rotate(300)' d='M0 0V-13.0M0 -5.5l-2.6 -2.6M0 -5.5l2.6 -2.6M0 -9.1l-1.7 -1.7M0 -9.1l1.7 -1.7'/></g><g id='d'><path transform='rotate(0)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(60)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(120)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(180)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(240)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/><path transform='rotate(300)' d='M0 0V-17.0M0 -7.1l-3.4 -3.4M0 -7.1l3.4 -3.4M0 -11.9l-2.2 -2.2M0 -11.9l2.2 -2.2'/></g></defs><g fill='none' stroke='rgba(255,255,255,.08)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(0.9 0.9)'><use href='%23a' transform='translate(62 64) rotate(0) scale(1.000)'/><use href='%23b' transform='translate(186 156) rotate(12) scale(1.000)'/><use href='%23c' transform='translate(112 196) rotate(30) scale(1.000)'/><use href='%23c' transform='translate(206 44) rotate(20) scale(0.692)'/><use href='%23d' transform='translate(28 176) rotate(8) scale(1.000)'/><use href='%23c' transform='translate(150 92) rotate(0) scale(0.538)'/></g><g fill='none' stroke='rgba(0,0,0,.32)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 0)'><use href='%23a' transform='translate(62 64) rotate(0) scale(1.000)'/><use href='%23b' transform='translate(186 156) rotate(12) scale(1.000)'/><use href='%23c' transform='translate(112 196) rotate(30) scale(1.000)'/><use href='%23c' transform='translate(206 44) rotate(20) scale(0.692)'/><use href='%23d' transform='translate(28 176) rotate(8) scale(1.000)'/><use href='%23c' transform='translate(150 92) rotate(0) scale(0.538)'/></g></svg>");--base:linear-gradient(165deg,#141b22 0%,#0f151b 60%,#0c1116 100%);--glass:rgba(16,22,28,.94)}}
+body,.panel{background:var(--pattern),var(--base);background-color:var(--paper);background-size:240px 240px,100% 100%}
+body{background-attachment:scroll,fixed;min-height:100%}
+header,.panel-head{background:var(--glass);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.brand-mark{position:fixed;inset:0;z-index:-1;pointer-events:none}
+.brand-mark i{position:absolute;left:50%;top:50%;width:min(62vw,340px);aspect-ratio:1;translate:-50% -50%;-webkit-mask:url(logo.png) center/contain no-repeat;mask:url(logo.png) center/contain no-repeat}
+.brand-mark i:first-child{background:rgba(255,255,255,.9);margin:1.5px 0 0 1.5px}
+.brand-mark i:last-child{background:rgba(40,62,84,.12)}
+@media (prefers-color-scheme: dark){.brand-mark i:first-child{background:rgba(255,255,255,.06)}.brand-mark i:last-child{background:rgba(0,0,0,.5)}}
+
+/* ===== 手機（特別是 iPhone）防止超出畫面 ===== */
+input,textarea,select{font-size:max(16px,1em)}                    /* 小於 16px 時 iPhone 會自動放大畫面 */
+input[type=date],input[type=month]{
+  -webkit-appearance:none;appearance:none;display:block;
+  min-width:0;max-width:100%;min-height:44px;text-align:left;line-height:1.3;
+}
+input::-webkit-date-and-time-value{text-align:left}
+.steps li,.steps label{min-width:0}
+.steps label{white-space:nowrap}
+.steps input[type=date]{font-size:16px;flex:0 1 145px;min-height:40px;padding:4px 8px}
+main,.panel-body,.sheet-body{overflow-x:clip}
+.item,section.block,.spec,.spec > div,dd,.pays li span,.pays li b{min-width:0;overflow-wrap:anywhere}
+.plate{max-width:100%}
+</style>
+
+</head>
+<body>
+
+<div class="brand-mark" aria-hidden="true"><i></i><i></i></div>
+<header>
+  <h1 id="title">本月銷售</h1>
+  <button class="hbtn" id="syncBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>更新</button>
+  <button class="hbtn" data-tab="settings" id="cfgBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>設定</button>
+</header>
+
+<main id="view"></main>
+
+<button class="fab" id="fab" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  <span id="fabText">新增</span>
+</button>
+
+<nav>
+  <button data-tab="sales"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/></svg>本月銷售<span class="dot" id="dotSales" hidden></span></button>
+  <button data-tab="taxi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3H8z"/><path d="M5 11l1.5-5h11L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/></svg>計程車<span class="dot" id="dotTaxi" hidden></span></button>
+  <button data-tab="renew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>續保<span class="dot" id="dotRenew" hidden></span></button>
+  <button data-tab="cash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 7l11-3v3"/><path d="M15 13.5h5"/><circle cx="16.5" cy="13.5" r=".6" fill="currentColor"/></svg>零用金<span class="dot" id="dotCash" hidden>!</span></button>
+  <button data-tab="db"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>資料庫</button>
+</nav>
+
+<div class="panel" id="panel" role="dialog" aria-modal="true"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* =========================================================
+   可自行修改的設定
+   ========================================================= */
+const SALES_STEPS = ['訂車', '入訂金', '配車', '派工', '入車款', '領車籍資料', '領牌', '拖車', '整備', '手冊包', '交車'];
+const TAXI_STEPS  = ['訂車', '配車', '安排拖車', '拖車抵達', '領送證件', '登記領牌資料', '車款餘額統計'];
+const PLATE_STEP  = { sales: '領牌', taxi: '登記領牌資料' };
+const STEP_ALIAS  = { '簽約訂車': '訂車', '付款/貸款': '入車款', '送證件': '領送證件', '領牌資料回傳': '登記領牌資料' };   // 舊版流程名稱對應
+const INSURANCE_WARN_DAYS = 30;
+const RENEW_WARN_DAYS = 60;   // 首年保險到期前幾天開始提醒續保
+const ASSIST_NAME = '蕙君';   // 助理
+const NOTIFY_NAME = '雪姊';   // 整備完成後要通知的人
+const CASH_OUT_CATS = ['規費', '拖車費', '洗車', '小百貨', '油資', '停車費', '郵資快遞', '文具雜支', '餐飲', '其他'];
+const CASH_IN_CATS  = ['公司撥補', '退回', '其他'];
+const CASH_LOW = 2000;        // 零用金餘額低於這個數字會變紅色提醒
+const ALLOC_MIN = 100000;     // 一般車：已收（訂金＋車款）要滿這個金額才能配車
+
+// 按「完成」時要填的資料。欄位名稱後面加 * 代表必填。
+// date：這個欄位的日期當作步驟完成日期　hint：表單上方的提醒
+// remind：沒勾的話，卡片上會一直提醒　after: 'notify'：完成後準備 LINE 訊息
+// 沒列在這裡的步驟，按下去直接完成。
+const STEP_FORMS = {
+  '訂車':   { hint: `印出訂單交給${ASSIST_NAME}助理。`, fields: [`訂單已交助理|訂單已印出交給${ASSIST_NAME}*`] },
+  '入訂金': { date: '訂金日期', hint: `訂金收據要附給${ASSIST_NAME}。刷卡的話要填刷卡日，並印出信用卡簽單。`,
+              fields: ['訂金日期*', '訂金金額*', '訂金付款方式*', '訂金刷卡日|刷卡日*', '訂金簽單已印|信用卡簽單已印出*', `訂金收據已交助理|訂金收據已附給${ASSIST_NAME}*`, '成交價'] },
+  '配車':   { hint: '已收滿 10 萬，記得到系統上按「預估」。', fields: ['系統已按預估|系統上已按預估*'] },
+  '派工':   { hint: `車到整備中心後派工：配件、小百貨。小百貨要貼給${ASSIST_NAME}助理。`,
+              fields: [`小百貨已交助理|小百貨已貼給${ASSIST_NAME}`, '配件'], remind: ['小百貨已交助理'] },
+  '領車籍資料': { hint: '要填兩張紙本，並打 EIP 證件領取單。',
+              fields: ['車籍紙本已填|兩張紙本已填好*', 'EIP領取單已打|EIP 證件領取單已打*'] },
+  '領牌':   { date: '領牌日', hint: '領牌前：收到身分證、印章，到和安 i 保險試算保險並開強制險。保險資料在這裡一起填。',
+              fields: ['身分證已收|已收到身分證*', '印章已收|已收到印章*', '和安已試算|和安 i 保險已試算*', '強制險已開|強制險已開*',
+                       '領牌日*', '車牌*', '車身號碼', '引擎號碼', '投保日期*', '險種*', '保險金額*', '保險公司', '強制險到期', '任意險到期'] },
+  '整備':   { hint: '配件裝完後確認：還有沒有額外配件要裝、洗車、裝小百貨、ETAG。完成後會準備好 LINE 訊息通知' + NOTIFY_NAME + '。',
+              fields: ['額外配件已確認|已確認沒有額外配件要裝*', '洗車工單已開|已洗車（洗車工單已開）*', '洗車工單號碼', '小百貨已安裝|小百貨已裝好*', 'ETAG已完成|ETAG 已完成*', '配件*'], after: 'notify' },
+  '手冊包': { hint: `車上手冊包：重點用螢光筆畫線、寫溫馨小提醒，最上面放兩張${NOTIFY_NAME}名片。`,
+              fields: ['手冊已畫線|螢光筆畫線*', '溫馨提醒已寫|溫馨小提醒已寫*', `名片已放|兩張${NOTIFY_NAME}名片已放*`] },
+  '交車':   { date: '交車日', hint: '記得交車上傳，並註記不聯繫。',
+              fields: ['交車日*', '交車已上傳*', '不聯繫已註記'], remind: ['不聯繫已註記'] },
+  // ---- 計程車（名稱前面加 taxi:）----
+  'taxi:配車':         { fields: ['車型*', '顏色*', '等級*', '價位*', '車身號碼|車身(引擎)號碼*'] },
+  'taxi:安排拖車':     { date: '拖車安排日', fields: ['拖車安排日*'] },
+  'taxi:拖車抵達':     { date: '拖車抵達日', fields: ['拖車抵達日*'] },
+  'taxi:登記領牌資料': { date: '領牌日', fields: ['領牌日*', '車牌*'] },
+  'taxi:車款餘額統計': { hint: '折後金額 = 價位 ×（1 − 折扣%），餘額 = 折後金額 − 已付金額',
+                    fields: ['價位*', '折扣*', '已付金額*'], calc: true },
+};
+function stepForm(step, kind) {
+  return STEP_FORMS[(kind === 'taxi' ? 'taxi:' : '') + step] || null;
+}
+const REMIND_TEXT = { 小百貨已交助理: `小百貨還沒貼給${ASSIST_NAME}`, 不聯繫已註記: '還沒註記不聯繫' };
+
+// 各欄位的輸入方式
+const FIELD_META = {
+  電話: { type: 'tel' },
+  月份: { type: 'month' },
+  投保日期: { type: 'date' }, 強制險到期: { type: 'date' }, 任意險到期: { type: 'date' },
+  領牌日: { type: 'date' }, 交車日: { type: 'date' },
+  險種: { type: 'multi', options: ['強制險', '甲式車體', '乙式車體', '丙式車體', '竊盜險', '第三人責任險', '乘客險', '駕駛人傷害險', '其他'] },
+  保險金額: { type: 'money', ph: '例如 32000' },
+  配件: { type: 'textarea', ph: '一行一項，例如：\n隔熱紙\n行車記錄器' },
+  特殊備註: { type: 'textarea' },
+  小百貨已訂購: { type: 'check' },
+  訂單已交助理: { type: 'check' }, 訂金收據已交助理: { type: 'check' }, 系統已按預估: { type: 'check' }, 小百貨已交助理: { type: 'check' },
+  車籍紙本已填: { type: 'check' }, EIP領取單已打: { type: 'check' },
+  身分證已收: { type: 'check' }, 印章已收: { type: 'check' }, 和安已試算: { type: 'check' }, 強制險已開: { type: 'check' },
+  額外配件已確認: { type: 'check' }, 手冊已畫線: { type: 'check' }, 溫馨提醒已寫: { type: 'check' }, 名片已放: { type: 'check' },
+  訂金付款方式: { type: 'multi', single: true, options: ['現金', '匯款', '刷卡'] },
+  訂金刷卡日: { type: 'date', showIf: ['訂金付款方式', '刷卡'] },
+  訂金簽單已印: { type: 'check', showIf: ['訂金付款方式', '刷卡'] },
+  信用卡簽單已印: { type: 'check', showIf: ['收款方式', '刷卡'] }, 洗車工單已開: { type: 'check' }, ETAG已完成: { type: 'check' },
+  小百貨已安裝: { type: 'check' }, 交車已上傳: { type: 'check' }, 不聯繫已註記: { type: 'check' },
+  洗車工單號碼: { upper: true }, 通知內容: { type: 'textarea' },
+  金額: { type: 'money', ph: '例如 1500' }, 日期: { type: 'date' },
+  項目: { ph: '例如 ABC-1234 領牌規費' }, 備註: { ph: '可不填' },
+  支出分類: { type: 'multi', single: true, options: CASH_OUT_CATS },
+  存入來源: { type: 'multi', single: true, options: CASH_IN_CATS },
+  成交價: { type: 'money', ph: '例如 985000' }, 訂金金額: { type: 'money' }, 訂金日期: { type: 'date' },
+  收款日期: { type: 'date' }, 收款金額: { type: 'money' },
+  收款方式: { type: 'multi', single: true, options: ['現金', '匯款', '刷卡', '貸款撥款', '其他'] },
+  已收金額: { type: 'money' }, 未收車款: { type: 'money' },
+  價位: { type: 'money', ph: '例如 850000' }, 已付金額: { type: 'money', ph: '沒有付過填 0' },
+  折後金額: { type: 'money' }, 車款餘額: { type: 'money' },
+  折扣: { type: 'percent', ph: '例如 3，沒有折扣填 0' }, 等級: { ph: '例如 豪華版' },
+  拖車安排日: { type: 'date' }, 拖車抵達日: { type: 'date' },
+  續保日期: { type: 'date' }, 聯絡日期: { type: 'date' },
+  續保險種: { type: 'multi', options: ['強制險', '甲式車體', '乙式車體', '丙式車體', '竊盜險', '第三人責任險', '乘客險', '駕駛人傷害險', '其他'] },
+  續保金額: { type: 'money', ph: '例如 28000' },
+  未續保原因: { type: 'multi', single: true, options: ['轉給別家續保', '車子賣掉了', '價格太高', '聯絡不到', '客戶自己處理', '其他'] },
+  說明: { type: 'textarea', ph: '可不填' },
+  聯絡內容: { type: 'textarea', ph: '例如：打電話，說下週回覆' },
+  車牌: { upper: true, ph: '例如 ABC-1234' }, 車身號碼: { upper: true }, 引擎號碼: { upper: true },
+};
+
+// 編輯頁的欄位分組
+const FORM = {
+  sales: [
+    ['客戶', ['客戶姓名', '電話']],
+    ['車籍資料', ['車牌', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼']],
+    ['加裝配件', ['配件']],
+    ['保險', ['投保日期', '保險公司', '險種', '保險金額', '強制險到期', '任意險到期']],
+    ['車款（分次收款請在「入車款」步驟記錄）', ['成交價', '訂金日期', '訂金金額']],
+    ['日期', ['月份', '領牌日', '交車日']],
+    ['訂車／訂金', [`訂單已交助理|訂單已交${ASSIST_NAME}`, '訂金付款方式', '訂金刷卡日|刷卡日', '訂金簽單已印|信用卡簽單已印', `訂金收據已交助理|訂金收據已交${ASSIST_NAME}`, '系統已按預估']],
+    ['工作項目', [`小百貨已交助理|小百貨已貼給${ASSIST_NAME}`, '車籍紙本已填|兩張紙本已填', 'EIP領取單已打', '身分證已收', '印章已收', '和安已試算|和安 i 保險已試算', '強制險已開',
+                  '額外配件已確認', '洗車工單已開|已洗車（工單已開）', '洗車工單號碼', 'ETAG已完成', '小百貨已安裝', '手冊已畫線|手冊螢光筆已畫線', '溫馨提醒已寫|溫馨小提醒已寫', `名片已放|${NOTIFY_NAME}名片已放`, '交車已上傳', '不聯繫已註記']],
+    ['特殊備註', ['特殊備註']],
+  ],
+  taxi: [
+    ['基本資料', ['客戶姓名', '電話', '月份']],
+    ['配車', ['廠牌', '車型', '顏色', '等級', '價位', '車身號碼|車身(引擎)號碼']],
+    ['拖車', ['拖車安排日', '拖車抵達日']],
+    ['領牌', ['領牌日', '車牌']],
+    ['車款', ['折扣', '已付金額']],
+    ['特殊備註', ['特殊備註']],
+  ],
+};
+FORM.db = FORM.sales;
+const TITLES = { sales: '本月銷售', taxi: '計程車', renew: '第二年續保', cash: '零用金', db: '車輛資料庫', settings: '設定' };
+const PHONE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>';
+
+/* =========================================================
+   狀態
+   ========================================================= */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+let cfg = store.get('cfg', { url: '', key: '' });
+let data = { db: [], sales: [], taxi: [], cash: [] };
+const fixData = d => { ['db', 'sales', 'taxi', 'cash'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; }); return d; };
+
+/* ---------- 離線暫存：IndexedDB（容量大，可存上萬筆） ---------- */
+const idb = {
+  _db: null,
+  open() {
+    if (!this._db) this._db = new Promise((res, rej) => {
+      const q = indexedDB.open('car-pwa', 1);
+      q.onupgradeneeded = () => q.result.createObjectStore('kv');
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+    return this._db;
+  },
+  async run(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('kv', mode); const q = fn(t.objectStore('kv'));
+      t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error);
+    });
+  },
+  get(k) { return this.run('readonly', s => s.get(k)); },
+  set(k, v) { return this.run('readwrite', s => s.put(v, k)); },
+  del(k) { return this.run('readwrite', s => s.delete(k)); },
+};
+function saveCache() { idb.set('cache', data).catch(() => saveCache()); }
+async function loadCache() {
+  try {
+    const old = store.get('cache', null);           // 舊版存在 localStorage 的資料搬過來
+    if (old) { await idb.set('cache', old); localStorage.removeItem('cache'); }
+    const c = await idb.get('cache');
+    if (c) data = fixData(c);
+  } catch (e) { data = store.get('cache', data); }
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+}
+let tab = store.get('tab', 'sales');
+let ui = { cashMonth: '', salesMonth: '全部', taxiFilter: '進行中', q: '', dbFilter: '全部', renewPeriod: '今年', renewFilter: '要處理' };
+let panelState = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const monthStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const stamp = () => { const d = new Date(); return `${todayStr()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const flowOf = r => {
+  const f = typeof r['流程'] === 'string' ? (() => { try { return JSON.parse(r['流程'] || '{}'); } catch (e) { return {}; } })() : { ...(r['流程'] || {}) };
+  Object.entries(STEP_ALIAS).forEach(([o, n]) => { if (f[o] && !f[n]) f[n] = f[o]; });
+  return f;
+};
+// 已完成步驟中，還沒勾的提醒事項
+/* ---------- 一般車車款（訂金 + 分次收款） ---------- */
+function payments(r) {
+  return (r['收款紀錄'] || '').split('\n').filter(Boolean).map(l => { const [d, a, m] = l.split('|'); return { d, a: Number(a) || 0, m: m || '' }; });
+}
+function payInfo(r) {
+  const price = Number(r['成交價']) || 0, dep = Number(r['訂金金額']) || 0, ps = payments(r);
+  const paid = dep + ps.reduce((t, p) => t + p.a, 0);
+  return { price, dep, ps, paid, left: price ? price - paid : null };
+}
+function payCalc(r) {
+  const i = payInfo(r);
+  if (i.price || i.paid) { r['已收金額'] = String(i.paid); r['未收車款'] = i.left === null ? '' : String(i.left); }
+  return r;
+}
+function payHtml(r, withDelete) {
+  const i = payInfo(r);
+  if (!i.price && !i.paid) return '<span class="muted">還沒有收款資料</span>';
+  return `<ul class="pays">
+    <li><span>成交價</span><b>${i.price ? fmtMoney(i.price) : '<span class="c-amber">未填</span>'}</b></li>
+    ${i.dep ? `<li><span>訂金${r['訂金日期'] ? '　' + esc(fmtD(r['訂金日期'])) : ''}</span><b>${fmtMoney(i.dep)}</b></li>` : ''}
+    ${i.ps.map((p, n) => `<li><span>${esc(fmtD(p.d))}　${esc(p.m)}</span><b>${fmtMoney(p.a)}</b>${withDelete ? `<button class="btn mini" data-paydel="${n}">刪除</button>` : ''}</li>`).join('')}
+    <li class="sum"><span>已收</span><b>${fmtMoney(i.paid) || '$0'}</b></li>
+    ${i.left !== null ? `<li class="sum"><span>尚欠</span><b class="${i.left > 0 ? 'c-red' : 'c-green'}">${i.left > 0 ? fmtMoney(i.left) : i.left < 0 ? '溢收 ' + fmtMoney(-i.left) : '已付清'}</b></li>` : ''}
+  </ul>`;
+}
+function oweText(r) { const i = payInfo(r); return i.left > 0 ? `尚欠車款 ${fmtMoney(i.left)}` : ''; }
+
+function openPaySheet() {
+  const { kind, id } = panelState; const r = findRec(kind, id); const f = flowOf(r);
+  openFormSheet({
+    title: '入車款：記錄一筆收款', specs: ['成交價*', '收款日期|收款（刷卡）日期*', '收款金額*', '收款方式*', '信用卡簽單已印|信用卡簽單已印出*'],
+    values: { 成交價: r['成交價'] || '', 收款日期: todayStr(), 收款方式: '' },
+    top: `<section class="block calc"><h4>目前收款</h4>${payHtml(r, true)}</section>`,
+    preview: v => {
+      const x = { ...r, 成交價: v['成交價'] }; const cur = payInfo(x);
+      const left = cur.price ? cur.left - (Number(v['收款金額']) || 0) : null;
+      return `<h4>收完這筆後</h4><ul class="pays"><li class="sum"><span>已收</span><b>${fmtMoney(cur.paid + (Number(v['收款金額']) || 0)) || '$0'}</b></li>
+        ${left !== null ? `<li class="sum"><span>尚欠</span><b class="${left > 0 ? 'c-red' : 'c-green'}">${left > 0 ? fmtMoney(left) : left < 0 ? '溢收 ' + fmtMoney(-left) : '已付清'}</b></li>` : ''}</ul>`;
+    },
+    okText: '記錄這筆收款',
+    onOk: v => {
+      const n = JSON.parse(JSON.stringify(r));
+      n['成交價'] = v['成交價'];
+      n['收款紀錄'] = (n['收款紀錄'] ? n['收款紀錄'] + '\n' : '') + `${v['收款日期']}|${v['收款金額']}|${v['收款方式']}`;
+      const fl = flowOf(n); if (!fl['入車款']) fl['入車款'] = v['收款日期']; n['流程'] = fl;
+      payCalc(n); const left = payInfo(n).left;
+      return saveRecord(kind, n, { stay: true, msg: left > 0 ? `已記錄收款，尚欠 ${fmtMoney(left)}` : '車款已全部付清' });
+    },
+    onUndo: f['入車款'] ? () => setStep('入車款', false, {}) : null, undoText: '取消完成',
+    undoConfirm: '取消「入車款」的完成狀態？收款紀錄會保留。',
+  });
+}
+
+function pendingReminders(r) {
+  const f = flowOf(r); const out = [];
+  if (f['入車款'] && oweText(r)) out.push(oweText(r));
+  Object.entries(STEP_FORMS).filter(([k]) => !k.startsWith('taxi:')).forEach(([s, sf]) => (sf.remind || []).forEach(n => { if (f[s] && !r[n]) out.push(REMIND_TEXT[n] || n); }));
+  return out;
+}
+const remindTags = r => pendingReminders(r).map(t => `<span class="tag red">${esc(t)}</span>`).join('');
+const stepsOf = kind => kind === 'taxi' ? TAXI_STEPS : SALES_STEPS;
+const nextStep = (r, kind) => { const f = flowOf(r); return stepsOf(kind).find(s => !f[s]) || null; };
+const plateDone = (r, kind) => !!flowOf(r)[PLATE_STEP[kind]];
+const daysUntil = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Math.round((new Date(s) - new Date(todayStr())) / 86400000) : null;
+function monthEndInfo() {
+  const d = new Date(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return { left: last - d.getDate(), inWindow: last - d.getDate() <= 4 };
+}
+
+/* =========================================================
+   API（沒設定網址時使用示範模式，資料只存在這支手機）
+   ========================================================= */
+async function api(action, payload = {}) {
+  if (!cfg.url) return demoApi(action, payload);
+  const res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action, ...payload }) });
+  if (!res.ok) throw new Error('連線失敗（' + res.status + '）');
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || '發生錯誤');
+  return j;
+}
+
+function demoApi(action, p) {
+  const d = store.get('demo', null) || seedDemo();
+  if (!d.cash) d.cash = seedDemo().cash;
+  let out = { ok: true };
+  if (action === 'list') out.data = d;
+  if (action === 'save') {
+    const r = { ...p.record };
+    if (!r.id) { r.id = Math.random().toString(36).slice(2, 10); r['建立時間'] = stamp(); }
+    r['更新時間'] = stamp();
+    const a = d[p.sheet]; const i = a.findIndex(x => x.id === r.id);
+    i >= 0 ? (a[i] = r) : a.push(r);
+    out.record = r;
+  }
+  if (action === 'delete') d[p.sheet] = d[p.sheet].filter(x => x.id !== p.id);
+  if (action === 'archive') {
+    const r = d.sales.find(x => x.id === p.id);
+    Object.assign(r, { 狀態: '已歸檔', 歸檔時間: stamp() });
+    d.sales = d.sales.filter(x => x.id !== p.id); d.db.push(r); out.record = r;
+  }
+  store.set('demo', d);
+  return Promise.resolve(JSON.parse(JSON.stringify(out)));
+}
+
+function seedDemo() {
+  const m = monthStr(), t = todayStr();
+  return {
+    sales: [
+      { id: 'demo1', 類型: '一般', 月份: m, 客戶姓名: '陳先生', 電話: '0912345678', 廠牌: 'Toyota', 車型: 'Corolla Cross', 年式: '2027', 顏色: '珍珠白', 車身號碼: 'JTDKB3FU0N3123456', 配件: '隔熱紙\n行車記錄器\n腳踏墊', 保險公司: '新光產險', 成交價: '985000', 訂金日期: t, 訂金金額: '50000', 流程: { 訂車: t, 入訂金: t, 配車: t }, 狀態: '進行中', 特殊備註: '客戶希望週末交車' },
+      { id: 'demo2', 類型: '一般', 月份: m, 客戶姓名: '林小姐', 電話: '0922333444', 廠牌: 'Toyota', 車型: 'RAV4', 年式: '2027', 顏色: '極光藍', 流程: { 訂車: t }, 狀態: '進行中' },
+    ],
+    taxi: [
+      { id: 'demo3', 類型: '計程車', 月份: m, 客戶姓名: '大發車行', 電話: '07-1234567', 廠牌: 'Toyota', 車型: 'Altis', 顏色: '黃', 等級: '計程車版', 價位: '720000', 車身號碼: 'JTDBR3FE0P3012345', 拖車安排日: t, 流程: { 訂車: t, 配車: t, 安排拖車: t }, 狀態: '進行中' },
+    ],
+    db: [
+      { id: 'demo4', 類型: '一般', 月份: '2026-05', 客戶姓名: '王先生', 電話: '0933555777', 車牌: 'BYD-2345', 廠牌: 'Toyota', 車型: 'Camry', 年式: '2026', 顏色: '黑', 車身號碼: 'JTNB11HK0K3012345', 引擎號碼: 'A25A1234567', 配件: '隔熱紙\n電動尾門', 投保日期: '2025-10-19', 險種: '強制險、乙式車體、第三人責任險', 保險金額: '28500', 保險公司: '富邦產險', 強制險到期: addDays(20), 任意險到期: addDays(20), 領牌日: '2026-05-28', 交車日: '2026-06-02', 特殊備註: '', 流程: {}, 狀態: '已歸檔', 歸檔時間: '2026-06-03 10:00' },
+      { id: 'demo5', 類型: '一般', 月份: '2025-08', 客戶姓名: '張太太', 電話: '0955111222', 車牌: 'BXY-1001', 廠牌: 'Toyota', 車型: 'Yaris Cross', 投保日期: '2025-08-10', 險種: '強制險、乙式車體', 保險金額: '24000', 保險公司: '富邦產險', 強制險到期: '2026-08-10', 任意險到期: '2026-08-10', 續保狀態: '已續保', 續保日期: '2026-08-05', 續保保險公司: '富邦產險', 續保險種: '強制險、乙式車體', 續保金額: '22800', 聯絡紀錄: '2026-07-20 打電話，答應續保', 流程: {}, 狀態: '已歸檔' },
+      { id: 'demo6', 類型: '一般', 月份: '2025-07', 客戶姓名: '李先生', 電話: '0966222333', 車牌: 'BXZ-3302', 廠牌: 'Toyota', 車型: 'Altis', 投保日期: '2025-07-02', 險種: '強制險、甲式車體', 保險金額: '31000', 任意險到期: '2026-07-02', 續保狀態: '未續保', 未續保原因: '轉給別家續保', 流程: {}, 狀態: '已歸檔' },
+      { id: 'demo7', 類型: '一般', 月份: '2025-09', 客戶姓名: '黃小姐', 電話: '0977333444', 車牌: 'RAB-8899', 廠牌: 'Toyota', 車型: 'Sienta', 投保日期: '2025-09-10', 險種: '強制險、丙式車體', 保險金額: '15000', 任意險到期: '2026-09-10', 流程: {}, 狀態: '已歸檔' },
+      { id: 'demo8', 類型: '一般', 月份: '2025-06', 客戶姓名: '吳先生', 電話: '0988444555', 車牌: 'BWW-5566', 廠牌: 'Toyota', 車型: 'Town Ace', 投保日期: '2025-06-15', 險種: '強制險、竊盜險', 保險金額: '9800', 任意險到期: '2026-06-15', 續保狀態: '已續保', 續保日期: '2026-06-10', 續保險種: '強制險、竊盜險', 續保金額: '9500', 流程: {}, 狀態: '已歸檔' },
+    ],
+    cash: (() => { const m = monthStr(); return [
+      { id: 'c1', 日期: m + '-01', 類型: '存入', 分類: '公司撥補', 項目: '', 金額: '10000', 建立時間: m + '-01 09:00' },
+      { id: 'c2', 日期: m + '-03', 類型: '支出', 分類: '規費', 項目: 'BYD-2345 領牌規費', 金額: '1650', 建立時間: m + '-03 10:00' },
+      { id: 'c3', 日期: m + '-03', 類型: '支出', 分類: '拖車費', 項目: '大發車行 Altis', 金額: '2500', 建立時間: m + '-03 15:00' },
+      { id: 'c4', 日期: m + '-05', 類型: '支出', 分類: '洗車', 項目: '', 金額: '300', 建立時間: m + '-05 11:00' },
+      { id: 'c5', 日期: m + '-06', 類型: '支出', 分類: '餐飲', 項目: '客戶交車茶點', 金額: '450', 建立時間: m + '-06 14:00' },
+    ]; })(),
+  };
+}
+function addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+
+async function sync(quiet) {
+  const btn = $('#syncBtn'); btn.classList.add('spin');
+  try {
+    const j = await api('list');
+    data = fixData(j.data); saveCache(); render();
+    if (!quiet) toast('已同步');
+  } catch (e) {
+    toast('同步失敗：' + e.message + '（顯示上次資料）');
+  } finally { btn.classList.remove('spin'); }
+}
+
+function upsertLocal(kind, rec) {
+  const a = data[kind]; const i = a.findIndex(x => x.id === rec.id);
+  i >= 0 ? (a[i] = rec) : a.push(rec);
+  saveCache();
+}
+
+/* =========================================================
+   畫面
+   ========================================================= */
+function render() {
+  document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
+  $('#cfgBtn').setAttribute('aria-current', tab === 'settings' ? 'page' : 'false');
+  $('#title').textContent = TITLES[tab];
+  const fab = $('#fab');
+  fab.hidden = tab === 'settings' || tab === 'renew' || tab === 'cash';
+  $('#fabText').textContent = tab === 'taxi' ? '新增計程車' : tab === 'db' ? '新增資料' : '新增銷售';
+  const v = $('#view');
+  v.innerHTML = (cfg.url ? '' : '<div class="demo">示範模式：資料只存在這支手機。到「設定」接上 Google 試算表。</div>')
+    + ({ sales: viewSales, taxi: viewTaxi, renew: viewRenew, cash: viewCash, db: viewDb, settings: viewSettings }[tab])();
+  updateDots();
+}
+
+function updateDots() {
+  $('#dotCash').hidden = !(data.cash.length && cashBalance() < CASH_LOW);
+  const me = monthEndInfo();
+  const s = data.sales.filter(r => !plateDone(r, 'sales')).length;
+  const t = data.taxi.filter(r => r['狀態'] !== '結案' && !plateDone(r, 'taxi')).length;
+  const set = (el, n) => { el.hidden = !(me.inWindow && n); el.textContent = n; };
+  set($('#dotSales'), s); set($('#dotTaxi'), t);
+  const rn = data.db.filter(r => ['逾期', '待聯絡'].includes(renewInfo(r).status)).length;
+  $('#dotRenew').hidden = !rn; $('#dotRenew').textContent = rn;
+}
+
+function plateHtml(r, big) {
+  return r['車牌'] ? `<span class="plate${big ? ' lg' : ''}">${esc(r['車牌'])}</span>` : `<span class="plate none">尚未領牌</span>`;
+}
+function carLine(r) { return [r['廠牌'], r['車型'], r['年式'], r['顏色']].filter(Boolean).join('　'); }
+function stepBar(r, kind) {
+  const f = flowOf(r);
+  return `<div class="steps-mini" aria-hidden="true">${stepsOf(kind).map(s => `<i class="${f[s] ? 'on' : ''}"></i>`).join('')}</div>`;
+}
+
+function monthEndAlert(kind) {
+  const me = monthEndInfo(); if (!me.inWindow) return '';
+  const list = kind === 'sales' ? data.sales.filter(r => !plateDone(r, 'sales'))
+    : data.taxi.filter(r => r['狀態'] !== '結案' && !plateDone(r, 'taxi'));
+  const when = me.left === 0 ? '今天是月底最後一天' : `距月底還有 ${me.left} 天`;
+  if (!list.length) return `<div class="alert"><b>${when}</b>，進行中的車都已領牌。</div>`;
+  return `<div class="alert"><b>${when}，${list.length} 台還沒領牌</b><ul>${list.map(r =>
+    `<li>${esc(r['客戶姓名'] || '未填客戶')}　${esc([r['廠牌'], r['車型']].filter(Boolean).join(' '))}</li>`).join('')}</ul></div>`;
+}
+
+function viewSales() {
+  const months = [...new Set(data.sales.map(r => r['月份']).filter(Boolean))].sort().reverse();
+  if (!months.includes(ui.salesMonth)) ui.salesMonth = '全部';
+  const rows = data.sales
+    .filter(r => ui.salesMonth === '全部' || r['月份'] === ui.salesMonth)
+    .sort((a, b) => (b['月份'] || '').localeCompare(a['月份'] || '') || (a['建立時間'] || '').localeCompare(b['建立時間'] || ''));
+  const waitingPlate = rows.filter(r => !plateDone(r, 'sales')).length;
+  const ready = rows.filter(r => !nextStep(r, 'sales')).length;
+
+  return monthEndAlert('sales')
+    + `<div class="chips">${['全部', ...months].map(m => `<button class="chip" data-month="${esc(m)}" aria-pressed="${ui.salesMonth === m}">${m === '全部' ? '全部' : fmtMonth(m)}</button>`).join('')}</div>`
+    + `<p class="summary"><span><strong>${rows.length}</strong>台進行中</span><span><strong>${waitingPlate}</strong>待領牌</span><span><strong>${ready}</strong>可歸檔</span>${(() => { const o = rows.map(r => payInfo(r).left).filter(v => v > 0); const t = o.reduce((a, b) => a + b, 0); return t ? `<span class="owe">未收車款 <strong>${fmtMoney(t)}</strong>（${o.length} 台）</span>` : ''; })()}</p>`
+    + (rows.length ? `<div class="list">${rows.map(r => {
+        const nx = nextStep(r, 'sales');
+        return `<button class="item" data-open="sales:${esc(r.id)}">
+          <div class="item-top">${plateHtml(r)}<span class="tag gray">${fmtMonth(r['月份'])}</span></div>
+          <h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
+          <div class="sub">${esc(carLine(r))}</div>
+          ${stepBar(r, 'sales')}
+          <div class="next ${nx ? '' : 'ready'}">${nx ? '下一步：' + esc(nx) : '流程完成，可以歸檔'}${nx === '配車' && payInfo(r).paid < ALLOC_MIN ? `<span class="c-red">（還差 ${fmtMoney(ALLOC_MIN - payInfo(r).paid)} 才能配車）</span>` : ''}</div>
+          ${pendingReminders(r).length ? `<div class="tags">${remindTags(r)}</div>` : ''}
+        </button>`;
+      }).join('')}</div>`
+      : `<div class="empty">這個月還沒有銷售紀錄。<br><button class="btn primary" data-new="sales">新增第一台</button></div>`);
+}
+
+function viewTaxi() {
+  const rows = data.taxi
+    .filter(r => ui.taxiFilter === '全部' || (ui.taxiFilter === '已結案' ? r['狀態'] === '結案' : r['狀態'] !== '結案'))
+    .filter(r => !ui.q || matches(r, ui.q))
+    .sort((a, b) => (b['月份'] || '').localeCompare(a['月份'] || ''));
+  const owe = rows.map(r => Number(calcTaxi({ ...r })['車款餘額']) || 0).filter(v => v > 0);
+  const total = owe.reduce((a, b) => a + b, 0);
+  return monthEndAlert('taxi')
+    + `<div class="chips">${['進行中', '已結案', '全部'].map(f => `<button class="chip" data-taxi="${f}" aria-pressed="${ui.taxiFilter === f}">${f}</button>`).join('')}</div>`
+    + (rows.length ? `<p class="summary"><span><strong>${rows.length}</strong>台</span><span class="owe ${total ? '' : 'clear'}">未收餘額 <strong>${total ? fmtMoney(total) : '$0'}</strong>${owe.length ? `（${owe.length} 台）` : ''}</span></p>` : '')
+    + (rows.length ? `<div class="list">${rows.map(r => {
+        const nx = nextStep(r, 'taxi'); const closed = r['狀態'] === '結案';
+        const x = calcTaxi({ ...r }); const bal = x['車款餘額'] === '' || x['車款餘額'] == null ? null : Number(x['車款餘額']);
+        return `<button class="item" data-open="taxi:${esc(r.id)}">
+          <div class="item-top">${plateHtml(r)}<span class="tag ${closed ? 'green' : 'gray'}">${closed ? '已結案' : fmtMonth(r['月份'])}</span></div>
+          <h3>${esc(r['客戶姓名'] || '未填車行')}</h3>
+          ${taxiSpec(r)}
+          ${bal !== null ? `<div class="next" style="${bal > 0 ? 'color:var(--red)' : 'color:var(--green)'}">${Number(r['折扣']) ? `折扣 ${esc(r['折扣'])}%　` : ''}${bal > 0 ? '餘額 ' + fmtMoney(bal) : '車款已付清'}</div>` : ''}
+          ${closed ? '' : stepBar(r, 'taxi') + `<div class="next ${nx ? '' : 'ready'}">${nx ? '下一步：' + esc(nx) : '流程完成，可以結案'}</div>`}
+        </button>`;
+      }).join('')}</div>`
+      : `<div class="empty">${ui.taxiFilter === '進行中' ? '目前沒有進行中的計程車。' : '沒有符合的紀錄。'}<br><button class="btn primary" data-new="taxi">新增計程車</button></div>`);
+}
+
+/* ---------- 零用金 ---------- */
+const cashAmt = r => (Number(r['金額']) || 0) * (r['類型'] === '存入' ? 1 : -1);
+const cashSorted = () => [...data.cash].sort((a, b) => (a['日期'] || '').localeCompare(b['日期'] || '') || (a['建立時間'] || '').localeCompare(b['建立時間'] || ''));
+const cashBalance = () => data.cash.reduce((t, r) => t + cashAmt(r), 0);
+const signMoney = n => (n < 0 ? '−' : '') + fmtMoney(Math.abs(n)).replace(/^$/, '$0');
+
+function viewCash() {
+  const bal = cashBalance(); const low = bal < CASH_LOW;
+  let run = 0; const withBal = cashSorted().map(r => { run += cashAmt(r); return { r, bal: run }; });
+  const months = [...new Set([monthStr(), ...data.cash.map(r => (r['日期'] || '').slice(0, 7)).filter(Boolean)])].sort().reverse().slice(0, 6);
+  if (!ui.cashMonth || (ui.cashMonth !== '全部' && !months.includes(ui.cashMonth))) ui.cashMonth = monthStr();
+  const rows = withBal.filter(x => ui.cashMonth === '全部' || (x.r['日期'] || '').startsWith(ui.cashMonth)).reverse();
+  const inSum = rows.filter(x => x.r['類型'] === '存入').reduce((t, x) => t + cashAmt(x.r), 0);
+  const outSum = -rows.filter(x => x.r['類型'] !== '存入').reduce((t, x) => t + cashAmt(x.r), 0);
+  const byCat = {}; rows.filter(x => x.r['類型'] !== '存入').forEach(x => { const c = x.r['分類'] || '其他'; byCat[c] = (byCat[c] || 0) - cashAmt(x.r); });
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  let lastDay = '';
+  const list = rows.map(({ r, bal }) => {
+    const head = r['日期'] !== lastDay ? `<div class="day-head">${esc(fmtD(r['日期']))}</div>` : ''; lastDay = r['日期'];
+    const isIn = r['類型'] === '存入';
+    return head + `<button class="cash-row" data-cash="${esc(r.id)}">
+      <span class="tag ${isIn ? 'green' : 'gray'}">${esc(r['分類'] || (isIn ? '存入' : '其他'))}</span>
+      <span class="what">${esc(r['項目'] || (isIn ? '存入零用金' : ''))}${r['備註'] ? `<small>${esc(r['備註'])}</small>` : ''}</span>
+      <span class="amt"><b class="${isIn ? 'c-green' : 'c-red'}">${isIn ? '+' : '−'}${fmtMoney(Number(r['金額']) || 0)}</b><small>餘 ${signMoney(bal)}</small></span>
+    </button>`;
+  }).join('');
+  return `<section class="block cash-hero ${low ? 'low' : ''}">
+      <div class="rate-label">目前零用金餘額</div>
+      <div class="cash-amt">${signMoney(bal)}</div>
+      ${low ? `<div class="c-red">餘額不到 ${fmtMoney(CASH_LOW)}，記得補錢</div>` : ''}
+      <div class="cash-btns">
+        <button class="btn cash-out" data-cashnew="支出">－ 記一筆支出</button>
+        <button class="btn good" data-cashnew="存入">＋ 存入零用金</button>
+      </div>
+    </section>
+    <div class="chips">${months.map(m => `<button class="chip" data-cmonth="${m}" aria-pressed="${ui.cashMonth === m}">${fmtMonth(m)}</button>`).join('')}<button class="chip" data-cmonth="全部" aria-pressed="${ui.cashMonth === '全部'}">全部</button></div>
+    <section class="block">
+      <dl class="cash-sum"><dt>${ui.cashMonth === '全部' ? '全部' : fmtMonth(ui.cashMonth)}存入</dt><dd class="c-green">${fmtMoney(inSum) || '$0'}</dd><dt>${ui.cashMonth === '全部' ? '全部' : fmtMonth(ui.cashMonth)}支出</dt><dd class="c-red">${fmtMoney(outSum) || '$0'}</dd></dl>
+      ${cats.length ? `<h4 style="margin:14px 0 6px">支出分類</h4><ul class="pays">${cats.map(([c, v]) => `<li><span>${esc(c)}</span><b>${fmtMoney(v)}</b></li>`).join('')}</ul>` : ''}
+    </section>
+    ${rows.length ? `<div class="cash-list">${list}</div>` : '<div class="empty">這個月還沒有零用金紀錄。</div>'}`;
+}
+
+function openCashSheet(type, id) {
+  const r = id ? data.cash.find(x => x.id === id) : null;
+  if (r) type = r['類型'] === '存入' ? '存入' : '支出';
+  const catField = type === '存入' ? '存入來源' : '支出分類';
+  openFormSheet({
+    title: (r ? '修改' : '') + (type === '存入' ? '存入零用金' : '記一筆支出'),
+    specs: type === '存入' ? ['日期*', '金額*', '存入來源*', '備註'] : ['日期*', '金額*', '支出分類*', '項目', '備註'],
+    values: r ? { ...r, [catField]: r['分類'] } : { 日期: todayStr(), [catField]: type === '存入' ? '公司撥補' : '' },
+    preview: v => { const n = Number(v['金額']) || 0; const after = cashBalance() - (r ? cashAmt(r) : 0) + (type === '存入' ? n : -n);
+      return `<ul class="pays"><li class="sum"><span>${type === "存入" ? "存完後餘額" : "記完後餘額"}</span><b class="${after < CASH_LOW ? 'c-red' : 'c-green'}">${signMoney(after)}</b></li></ul>`; },
+    okText: r ? '儲存修改' : (type === '存入' ? '存入' : '記下這筆支出'),
+    onOk: v => saveCash({ ...(r || {}), 日期: v['日期'], 類型: type, 分類: v[catField], 項目: v['項目'] || '', 金額: v['金額'], 備註: v['備註'] || '' }, r ? '已修改' : type === '存入' ? '已存入' : '已記下支出'),
+    onUndo: r ? () => deleteCash(r.id) : null, undoText: '刪除這筆',
+    undoConfirm: r ? `刪除這筆零用金紀錄？\n${fmtD(r['日期'])}　${r['分類']}　${fmtMoney(Number(r['金額']))}` : '',
+  });
+}
+async function saveCash(rec, msg) {
+  try { const j = await api('save', { sheet: 'cash', record: rec }); upsertLocal('cash', j.record); render(); toast(`${msg}，餘額 ${signMoney(cashBalance())}`); }
+  catch (e) { toast('儲存失敗：' + e.message); }
+}
+async function deleteCash(id) {
+  try { await api('delete', { sheet: 'cash', id }); data.cash = data.cash.filter(x => x.id !== id); saveCache(); render(); toast('已刪除'); }
+  catch (e) { toast('刪除失敗：' + e.message); }
+}
+
+/* ---------- 計程車車款 ---------- */
+function taxiSpec(r) {
+  const cell = (k, v, cls = '') => `<div class="${cls}"><span>${k}</span>${v ? `<b>${v}</b>` : '<b class="none">未填</b>'}</div>`;
+  return `<div class="spec">
+    ${cell('車型', esc(r['車型']))}${cell('顏色', esc(r['顏色']))}
+    ${cell('等級', esc(r['等級']))}${cell('價位', esc(fmtMoney(r['價位'])))}
+    ${cell('車身(引擎)號碼', r['車身號碼'] || r['引擎號碼'] ? `<span class="vin">${esc(r['車身號碼'] || r['引擎號碼'])}</span>` : '', 'full')}
+  </div>`;
+}
+function calcTaxi(r) {
+  const p = Number(r['價位']) || 0; if (!p) return r;
+  const d = Number(r['折扣']) || 0, paid = Number(r['已付金額']) || 0;
+  const net = Math.round(p * (1 - d / 100));
+  r['折後金額'] = String(net);
+  r['車款餘額'] = r['已付金額'] === '' || r['已付金額'] == null ? '' : String(net - paid);
+  return r;
+}
+function balanceHtml(r) {
+  if (!r['價位']) return '<span class="muted">還沒填價位</span>';
+  const x = calcTaxi({ ...r });
+  const bal = Number(x['車款餘額']);
+  return `<dl>
+    <dt>價位</dt><dd>${fmtMoney(x['價位'])}</dd>
+    <dt>折扣</dt><dd>${esc(x['折扣'] || '0')}%${Number(x['折扣']) ? `（減 ${fmtMoney(Number(x['價位']) - Number(x['折後金額']))}）` : ''}</dd>
+    <dt>折後金額</dt><dd>${fmtMoney(x['折後金額'])}</dd>
+    <dt>已付金額</dt><dd>${x['已付金額'] !== '' && x['已付金額'] != null ? (fmtMoney(x['已付金額']) || '$0') : '未填'}</dd>
+    ${x['車款餘額'] !== '' ? `<dt>餘額</dt><dd class="${bal > 0 ? 'c-red' : 'c-green'}" style="font-size:1.25em">${bal > 0 ? fmtMoney(bal) : bal < 0 ? '溢收 ' + fmtMoney(-bal) : '已付清'}</dd>` : ''}
+  </dl>`;
+}
+
+/* ---------- 第二年續保 ---------- */
+const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+const fmtD = v => v ? String(v).replace(/-/g, '/') : '';
+function firstExpiry(r) {
+  if (isDate(r['任意險到期'])) return r['任意險到期'];
+  if (isDate(r['強制險到期'])) return r['強制險到期'];
+  if (isDate(r['投保日期'])) { const d = new Date(r['投保日期']); d.setFullYear(d.getFullYear() + 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  return '';
+}
+function renewInfo(r) {
+  const exp = firstExpiry(r), days = daysUntil(exp), st = r['續保狀態'] || '';
+  let status;
+  if (st === '已續保' || st === '未續保') status = st;
+  else if (!exp) status = '無資料';
+  else if (days < 0) status = '逾期';
+  else if (days <= RENEW_WARN_DAYS) status = '待聯絡';
+  else status = '未到期';
+  return { exp, days, status };
+}
+// 應續保 = 首年到期日落在期間內，且已到期或已有結果
+function renewStats(inPeriod) {
+  const c = { 已續保: 0, 未續保: 0, 逾期: 0 };
+  data.db.forEach(r => { const i = renewInfo(r); if (i.exp && inPeriod(i.exp) && i.status in c) c[i.status]++; });
+  const total = c.已續保 + c.未續保 + c.逾期;
+  return { ...c, total, rate: total ? Math.round(c.已續保 / total * 100) : null };
+}
+function insuranceTags(r) {
+  const i = renewInfo(r);
+  if (i.status === '已續保') return '<span class="tag green">已續保</span>';
+  if (i.status === '未續保') return '<span class="tag gray">沒有續保</span>';
+  if (i.status === '逾期') return '<span class="tag red">續保已過期</span>';
+  if (i.status === '待聯絡') return `<span class="tag amber">${i.days} 天後要續保</span>`;
+  return '';
+}
+const insuranceSoon = r => ['逾期', '待聯絡'].includes(renewInfo(r).status);
+function renewLine(i, r) {
+  if (i.status === '已續保') return `<span class="c-green">已續保　${esc(fmtD(r['續保日期']))}${r['續保金額'] ? '　' + esc(fmtMoney(r['續保金額'])) : ''}</span>`;
+  if (i.status === '未續保') return `<span>沒有續保：${esc(r['未續保原因'])}</span>`;
+  if (i.status === '逾期') return `<span class="c-red">已經過期 ${-i.days} 天，還沒續保</span>`;
+  if (i.status === '待聯絡') return `<span class="c-amber">還有 ${i.days} 天到期，要聯絡</span>`;
+  if (i.status === '未到期') return `<span>還有 ${i.days} 天到期</span>`;
+  return '<span class="c-red">沒有填保險日期</span>';
+}
+const lastContact = r => (r['聯絡紀錄'] || '').split('\n').filter(Boolean)[0] || '';
+const telOf = r => (r['電話'] || '').replace(/[^\d+]/g, '');
+
+function viewRenew() {
+  const y = new Date().getFullYear();
+  const periods = { 今年: e => e.startsWith(String(y)), 去年: e => e.startsWith(String(y - 1)), 全部: () => true };
+  const st = renewStats(periods[ui.renewPeriod]);
+  const all = data.db.map(r => ({ r, i: renewInfo(r) }));
+  const lists = {
+    要處理: all.filter(x => x.i.status === '逾期' || x.i.status === '待聯絡').sort((a, b) => a.i.days - b.i.days),
+    已續保: all.filter(x => x.i.status === '已續保'),
+    沒有續保: all.filter(x => x.i.status === '未續保'),
+    還沒到期: all.filter(x => x.i.status === '未到期').sort((a, b) => a.i.days - b.i.days),
+  };
+  if (!lists[ui.renewFilter]) ui.renewFilter = '要處理';
+  const rows = lists[ui.renewFilter];
+  const noData = all.filter(x => x.i.status === '無資料').length;
+  return `<section class="block">
+      <div class="chips">${Object.keys(periods).map(p => `<button class="chip" data-rper="${p}" aria-pressed="${ui.renewPeriod === p}">${p}</button>`).join('')}</div>
+      <div class="rate-row">
+        <div><div class="rate-label">第二年繼續率</div><div class="rate">${st.rate === null ? '—' : st.rate + '%'}</div></div>
+        <dl class="rate-dl"><dt>應續保</dt><dd>${st.total} 台</dd><dt>已續保</dt><dd class="c-green">${st.已續保} 台</dd><dt>沒有續保</dt><dd>${st.未續保} 台</dd><dt>過期未處理</dt><dd class="${st.逾期 ? 'c-red' : ''}">${st.逾期} 台</dd></dl>
+      </div>
+      <p class="muted" style="margin:12px 0 0">繼續率 = 已續保 ÷ 應續保。應續保是指第一年保險已到期、或已經有結果的車。</p>
+    </section>
+    <div class="chips">${Object.keys(lists).map(k => `<button class="chip" data-rf="${k}" aria-pressed="${ui.renewFilter === k}">${k} ${lists[k].length}</button>`).join('')}</div>
+    ${noData ? `<p class="muted">另有 ${noData} 台沒有保險日期，沒辦法計算。請到資料庫補上投保日期。</p>` : ''}
+    ${rows.length ? `<div class="list">${rows.map(({ r, i }) => `
+      <div class="item" data-open="db:${esc(r.id)}" role="button" tabindex="0">
+        <div class="item-top">${plateHtml(r)}${telOf(r) ? `<a class="call" href="tel:${esc(telOf(r))}">${PHONE_SVG}打電話</a>` : ''}</div>
+        <h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
+        <div class="sub">${esc(carLine(r))}</div>
+        <div class="renew-line">第一年保險到期：${esc(fmtD(i.exp))}<br>${renewLine(i, r)}</div>
+        ${lastContact(r) ? `<div class="sub">最近聯絡：${esc(lastContact(r))}</div>` : ''}
+      </div>`).join('')}</div>`
+      : `<div class="empty">${ui.renewFilter === '要處理' ? `目前沒有 ${RENEW_WARN_DAYS} 天內要續保的車。` : '這裡目前沒有車。'}</div>`}`;
+}
+
+function renewBlock(r) {
+  const i = renewInfo(r); const logs = (r['聯絡紀錄'] || '').split('\n').filter(Boolean);
+  const cls = { 已續保: 'green', 逾期: 'red', 待聯絡: 'amber' }[i.status] || '';
+  const done = i.status === '已續保' || i.status === '未續保';
+  const btns = done
+    ? `<button class="btn" data-ract="${i.status === '已續保' ? 'renewed' : 'lost'}">修改</button><button class="btn" data-ract="reset">改回未處理</button>`
+    : `<button class="btn primary" data-ract="renewed">已續保</button><button class="btn" data-ract="lost">沒有續保</button>`;
+  return `<section class="block renew-box ${cls}"><h4>第二年續保</h4>
+    <div class="renew-line big">${i.exp ? '第一年保險到期：' + esc(fmtD(i.exp)) + '<br>' : ''}${renewLine(i, r)}</div>
+    ${i.status === '已續保' && (r['續保保險公司'] || r['續保險種']) ? `<dl style="margin-top:12px">${r['續保保險公司'] ? `<dt>保險公司</dt><dd>${esc(r['續保保險公司'])}</dd>` : ''}${r['續保險種'] ? `<dt>險種</dt><dd>${esc(r['續保險種'])}</dd>` : ''}</dl>` : ''}
+    <div class="actions">${telOf(r) ? `<a class="call" href="tel:${esc(telOf(r))}">${PHONE_SVG}打電話</a>` : ''}${btns}<button class="btn" data-ract="contact">記錄聯絡</button></div>
+    ${logs.length ? `<h4 style="margin:18px 0 8px">聯絡紀錄</h4><ul class="log">${logs.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
+function renewAction(act) {
+  const { id } = panelState; const r = JSON.parse(JSON.stringify(findRec('db', id)));
+  const opt = msg => ({ stay: true, msg });
+  if (act === 'renewed') openFormSheet({
+    title: '已續保', specs: ['續保日期*', '續保保險公司', '續保險種*', '續保金額*'], okText: '儲存：已續保',
+    values: { 續保日期: r['續保日期'] || todayStr(), 續保保險公司: r['續保保險公司'] || r['保險公司'] || '', 續保險種: r['續保險種'] || r['險種'] || '', 續保金額: r['續保金額'] || '' },
+    onOk: v => saveRecord('db', { ...r, ...v, 續保狀態: '已續保' }, opt('已記錄：已續保')),
+  });
+  if (act === 'lost') openFormSheet({
+    title: '沒有續保', specs: ['未續保原因*', '說明'], okText: '儲存：沒有續保', values: { 未續保原因: r['未續保原因'] || '' },
+    onOk: v => {
+      const n = { ...r, 未續保原因: v['未續保原因'], 續保狀態: '未續保' };
+      if (v['說明']) n['聯絡紀錄'] = `${todayStr()} 沒有續保：${v['說明']}\n` + (r['聯絡紀錄'] || '');
+      return saveRecord('db', n, opt('已記錄：沒有續保'));
+    },
+  });
+  if (act === 'contact') openFormSheet({
+    title: '記錄聯絡', specs: ['聯絡日期*', '聯絡內容*'], okText: '儲存聯絡紀錄', values: { 聯絡日期: todayStr() },
+    onOk: v => saveRecord('db', { ...r, 聯絡紀錄: `${v['聯絡日期']} ${v['聯絡內容'].replace(/\n/g, ' ')}\n` + (r['聯絡紀錄'] || '') }, opt('已儲存聯絡紀錄')),
+  });
+  if (act === 'reset' && confirm('改回「未處理」？已填的續保資料會保留。')) saveRecord('db', { ...r, 續保狀態: '' }, opt('已改回未處理'));
+}
+
+function norm(s) { return String(s ?? '').toLowerCase().replace(/[\s\-_.·]/g, ''); }
+function matches(r, q) {
+  const hay = norm(['車牌', '客戶姓名', '電話', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼', '配件', '保險公司', '特殊備註', '月份', '領牌日', '交車日'].map(f => r[f]).join('|'));
+  return norm(q).split('').length === 0 || q.trim().split(/\s+/).every(w => hay.includes(norm(w)));
+}
+
+function viewDb() {
+  const q = ui.q.trim();
+  let rows;
+  if (q) {
+    rows = [
+      ...data.db.map(r => ({ r, kind: 'db' })),
+      ...data.sales.map(r => ({ r, kind: 'sales' })),
+      ...data.taxi.map(r => ({ r, kind: 'taxi' })),
+    ].filter(x => matches(x.r, q));
+  } else {
+    rows = data.db.map(r => ({ r, kind: 'db' }));
+  }
+  if (ui.dbFilter === '要續保') rows = rows.filter(x => insuranceSoon(x.r));
+  rows.sort((a, b) => (b.r['歸檔時間'] || b.r['更新時間'] || '').localeCompare(a.r['歸檔時間'] || a.r['更新時間'] || ''));
+  const soonCount = data.db.filter(insuranceSoon).length;
+  const src = { db: '', sales: '<span class="tag">銷售進行中</span>', taxi: '<span class="tag">計程車</span>' };
+
+  return `<div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="車牌、姓名、電話、車身號碼、配件…" value="${esc(ui.q)}" autocomplete="off">
+    </div>`
+    + `<div class="chips"><button class="chip" data-dbf="全部" aria-pressed="${ui.dbFilter === '全部'}">全部</button><button class="chip" data-dbf="要續保" aria-pressed="${ui.dbFilter === '要續保'}">要續保${soonCount ? `（${soonCount}）` : ''}</button></div>`
+    + `<p class="muted">${q ? `找到 ${rows.length} 筆（含進行中與計程車）` : `共 ${rows.length} 台已歸檔`}</p>`
+    + (rows.length ? `<div class="list">${rows.map(({ r, kind }) => {
+        const acc = (r['配件'] || '').split('\n').map(s => s.trim()).filter(Boolean);
+        return `<button class="item" data-open="${kind}:${esc(r.id)}">
+          <div class="item-top">${plateHtml(r)}${src[kind]}</div>
+          <h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
+          <div class="sub">${esc(carLine(r))}${r['領牌日'] ? '　領牌 ' + esc(r['領牌日']) : ''}</div>
+          <div class="tags">${insuranceTags(r)}${acc.slice(0, 4).map(a => `<span class="tag gray">${esc(a)}</span>`).join('')}${acc.length > 4 ? `<span class="tag gray">+${acc.length - 4}</span>` : ''}</div>
+        </button>`;
+      }).join('')}</div>`
+      : `<div class="empty">${q ? '找不到符合「' + esc(q) + '」的車。試試車牌後四碼或客戶姓氏。' : '歸檔的車會出現在這裡。'}</div>`);
+}
+
+function viewSettings() {
+  return `<section class="block">
+      <h4>連接 Google 試算表</h4>
+      <label class="field"><span>Apps Script 網址</span><input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}"></label>
+      <label class="field"><span>密碼（與 Code.gs 裡的 API_KEY 相同）</span><input id="cfgKey" type="password" value="${esc(cfg.key)}"></label>
+      <div class="actions"><button class="btn primary" id="saveCfg">儲存並同步</button></div>
+    </section>
+    <section class="block help">
+      <h4>安裝到手機桌面</h4>
+      <ol><li>iPhone：用 Safari 開啟 → 分享 → 加入主畫面</li><li>Android：用 Chrome 開啟 → 選單 → 安裝應用程式</li></ol>
+    </section>
+    <section class="block">
+      <h4>提醒</h4>
+      <p class="muted" style="margin:0">每月最後五天，每天早上會寄 Email 列出還沒領牌的車；每週一另外寄第二年續保名單（${RENEW_WARN_DAYS} 天內到期、還沒續保的車）和今年的繼續率。開啟 Gmail 通知就能在手機收到。</p>
+    </section>
+    <section class="block">
+      <h4>資料</h4>
+      <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
+      <button class="btn" id="clearCache">清除手機上的暫存</button>
+    </section>`;
+}
+
+function fmtMonth(m) { if (!m) return '未填月份'; const [y, mm] = m.split('-'); return `${+mm} 月${y !== String(new Date().getFullYear()) ? `（${y}）` : ''}`; }
+
+/* ---------- 欄位工具 ---------- */
+const parseSpec = s => { const required = s.endsWith('*'); const [name, label] = s.replace(/\*$/, '').split('|'); return { name, label: label || name, required }; };
+const metaOf = n => FIELD_META[n] || {};
+const fmtMoney = v => v ? '$' + Number(v).toLocaleString('zh-TW') : '';
+function fmtValue(name, v) {
+  if (!v) return '';
+  if (metaOf(name).type === 'percent') return v + '%';
+  if (metaOf(name).type === 'money') return fmtMoney(v);
+  if (metaOf(name).type === 'check') return name;
+  return v;
+}
+
+function fieldHtml(name, value, required, shown) {
+  const m = metaOf(name); const type = m.type || 'text'; const v = value ?? '';
+  shown = shown || name;
+  const label = `<span>${esc(shown)}${required ? ' <b class="req">必填</b>' : ''}</span>`;
+  if (type === 'multi') {
+    const sel = String(v).split('、').filter(Boolean);
+    return `<div class="field">${label}<div class="multi" data-f="${esc(name)}"${m.single ? ' data-single' : ''}>${m.options.map(o =>
+      `<button type="button" class="chip" data-opt aria-pressed="${sel.includes(o)}">${esc(o)}</button>`).join('')}</div></div>`;
+  }
+  if (type === 'percent') return `<label class="field">${label}<div class="pct"><input data-f="${esc(name)}" type="text" inputmode="decimal" placeholder="${esc(m.ph || '')}" value="${esc(v)}"><b>%</b></div></label>`;
+  if (type === 'check') return `<label class="field check wide"><input type="checkbox" data-f="${esc(name)}" ${v ? 'checked' : ''}><span>${esc(shown)}${required ? ' <b class="req">必填</b>' : ''}</span></label>`;
+  if (type === 'textarea') return `<label class="field wide">${label}<textarea data-f="${esc(name)}" placeholder="${esc(m.ph || '')}">${esc(v)}</textarea></label>`;
+  const attrs = type === 'money' ? 'type="text" inputmode="numeric"' : `type="${type}"`;
+  return `<label class="field">${label}<input data-f="${esc(name)}" ${attrs} placeholder="${esc(m.ph || '')}" value="${esc(v)}" ${m.upper ? 'autocapitalize="characters"' : ''}></label>`;
+}
+
+function readFields(root) {
+  const out = {};
+  root.querySelectorAll('[data-f]').forEach(el => {
+    const name = el.dataset.f; const m = metaOf(name);
+    let v;
+    if (el.type === 'checkbox') v = el.checked ? '是' : '';
+    else if (el.classList.contains('multi')) v = [...el.querySelectorAll('[aria-pressed="true"]')].map(b => b.textContent).join('、');
+    else v = el.value.trim();
+    if (m.upper) v = v.toUpperCase();
+    if (m.type === 'money') v = v.replace(/[^\d]/g, '');
+    if (m.type === 'percent') v = v.replace(/[^\d.]/g, '');
+    out[name] = v;
+  });
+  return out;
+}
+
+const shown = (name, values) => { const c = metaOf(name).showIf; return !c || values[c[0]] === c[1]; };
+function applyShowIf(root) {
+  if (!root) return;
+  const v = readFields(root);
+  root.querySelectorAll('[data-f]').forEach(el => { const fld = el.closest('.field'); if (fld && metaOf(el.dataset.f).showIf) fld.hidden = !shown(el.dataset.f, v); });
+}
+function markMissing(root, specs, values) {
+  root.querySelectorAll('.invalid').forEach(x => x.classList.remove('invalid'));
+  const missing = specs.map(parseSpec).filter(s => s.required && !values[s.name] && shown(s.name, values));
+  missing.forEach(x => root.querySelector(`[data-f="${CSS.escape(x.name)}"]`)?.closest('.field')?.classList.add('invalid'));
+  return missing.map(x => x.label);
+}
+
+function stepSummary(r, step, kind) {
+  if (step === '入車款' && kind !== 'taxi') { const i = payInfo(r); return i.paid ? `已收 ${fmtMoney(i.paid)}${i.left > 0 ? '｜尚欠 ' + fmtMoney(i.left) : i.left !== null ? '｜已付清' : ''}` : ''; }
+  const sf = stepForm(step, kind); if (!sf) return '';
+  return sf.fields.map(parseSpec).map(s => s.name).filter(n => n !== sf.date && r[n] && metaOf(n).type !== 'check')
+    .map(n => n === '配件' ? r[n].split('\n').filter(Boolean).join('、') : fmtValue(n, r[n]))
+    .slice(0, 3).join('｜');
+}
+
+/* =========================================================
+   詳細頁（點步驟 → 填資料 → 完成）
+   ========================================================= */
+function findRec(kind, id) { return data[kind].find(x => x.id === id); }
+
+function openDetail(kind, id) {
+  const r = findRec(kind, id); if (!r) return;
+  panelState = { mode: 'detail', kind, id };
+  const f = flowOf(r); const steps = kind === 'db' ? [] : stepsOf(kind); const nx = nextStep(r, kind);
+  const acc = (r['配件'] || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const row = (k, v, cls = '') => v ? `<dt>${k}</dt><dd class="${cls}">${v}</dd>` : '';
+  const closed = r['狀態'] === '結案';
+  const hasIns = ['投保日期', '保險公司', '險種', '保險金額', '強制險到期', '任意險到期'].some(k => r[k]);
+
+  let actions = '';
+  if (kind === 'sales') actions = (f['整備'] && !f['交車'] ? `<button class="btn wide" data-act="notify">LINE 通知${NOTIFY_NAME}${r['整備通知時間'] ? '（已通知 ' + esc(r['整備通知時間'].slice(5)) + '）' : ''}</button>` : '')
+    + `<button class="btn ${nx ? '' : 'good'} wide" data-act="archive">歸檔到資料庫</button>`;
+  if (kind === 'taxi') actions = closed ? `<button class="btn wide" data-act="reopen">重新開啟</button>` : `<button class="btn ${nx ? '' : 'good'} wide" data-act="close">結案</button>`;
+
+  $('#panel').innerHTML = `
+    <div class="panel-head">
+      <button class="icon-btn" data-act="back" aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <h2>${{ sales: '銷售中', taxi: '計程車', db: '車輛資料' }[kind]}</h2>
+      <button class="btn" data-act="edit">編輯</button>
+    </div>
+    <div class="panel-body">
+      <div class="hero">${plateHtml(r, true)}<h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
+        <div class="tags">${r['月份'] ? `<span class="tag gray">${fmtMonth(r['月份'])}</span>` : ''}${closed ? '<span class="tag green">已結案</span>' : ''}${r['狀態'] === '已歸檔' ? '<span class="tag green">已歸檔</span>' : ''}${insuranceTags(r)}${kind === 'sales' ? remindTags(r) : ''}</div>
+      </div>
+      ${kind === 'db' ? renewBlock(r) : ''}
+      ${steps.length ? `<section class="block"><h4>流程${nx ? '　點步驟填資料並完成' : '　全部完成'}</h4><ol class="steps">${steps.map((s, i) => `
+        <li class="${f[s] ? 'done' : ''} ${s === nx ? 'is-next' : ''}">
+          <button class="step-row" data-step="${esc(s)}">
+            <span class="tick" aria-hidden="true">${f[s] ? '✓' : i + 1}</span>
+            <span class="name">${esc(s)}${f[s] && stepSummary(r, s, kind) ? `<small>${esc(stepSummary(r, s, kind))}</small>` : ''}</span>
+            <span class="when">${f[s] ? esc(f[s]) : (s === nx ? '<span class="go">完成</span>' : '')}</span>
+          </button>
+        </li>`).join('')}</ol></section>` : ''}
+      <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
+      <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl></section>
+      ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
+      ${kind !== 'taxi' ? `<section class="block"><h4>加裝配件</h4>${acc.length ? `<div class="tags">${acc.map(a => `<span class="tag">${esc(a)}</span>`).join('')}</div>` : '<span class="muted">尚未填寫</span>'}</section>
+      <section class="block"><h4>保險</h4>${hasIns ? `<dl>${row('投保日期', esc(r['投保日期']))}${row('保險公司', esc(r['保險公司']))}${row('險種', esc(r['險種']))}${row('保險金額', esc(fmtMoney(r['保險金額'])))}${row('強制險到期', esc(r['強制險到期']))}${row('任意險到期', esc(r['任意險到期']))}</dl>` : '<span class="muted">尚未填寫</span>'}</section>` : ''}
+      ${kind === 'taxi' ? `<section class="block"><h4>拖車</h4>${r['拖車安排日'] || r['拖車抵達日'] ? `<dl>${row('安排日', esc(r['拖車安排日']))}${row('抵達日', esc(r['拖車抵達日']))}</dl>` : '<span class="muted">尚未安排</span>'}</section>
+      <section class="block"><h4>車款餘額</h4>${balanceHtml(r)}</section>` : ''}
+      ${r['特殊備註'] ? `<section class="block"><h4>特殊備註</h4><div class="note">${esc(r['特殊備註'])}</div></section>` : ''}
+      ${actions ? `<div class="actions">${actions}</div>` : ''}
+      <p class="muted">${r['建立時間'] ? '建立 ' + esc(r['建立時間']) : ''}${r['歸檔時間'] ? '　歸檔 ' + esc(r['歸檔時間']) : ''}</p>
+    </div>`;
+  showPanel();
+}
+
+/* ---------- 步驟完成視窗 ---------- */
+let sheetCtx = null;
+
+// ctx: { title, specs, values, okText, onOk(vals), onUndo, undoText, undoConfirm }
+function openFormSheet(ctx) {
+  sheetCtx = ctx;
+  const specs = ctx.specs.map(parseSpec);
+  $('#sheet').innerHTML = `
+    <div class="sheet-card" role="dialog" aria-modal="true" aria-label="${esc(ctx.title)}">
+      <div class="sheet-head"><h3>${esc(ctx.title)}</h3>
+        <button class="icon-btn" data-sact="close" aria-label="關閉"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      ${ctx.hint ? `<div class="alert" style="margin:2px 0 16px">${esc(ctx.hint)}</div>` : ''}
+      ${ctx.top || ''}
+      <div class="sheet-body">${specs.map(s => fieldHtml(s.name, (ctx.values || {})[s.name] ?? '', s.required, s.label)).join('')}</div>
+      ${ctx.calc || ctx.preview ? '<section class="block calc" id="calcBox"></section>' : ''}
+      <div class="actions">
+        ${ctx.onUndo ? `<button class="btn danger" data-sact="undo" style="margin-left:0">${esc(ctx.undoText)}</button>` : ''}
+        <button class="btn primary wide" data-sact="ok">${esc(ctx.okText)}</button>
+      </div>
+    </div>`;
+  applyShowIf($('#sheet'));
+  $('#sheet').oninput = null;
+  if (ctx.calc || ctx.preview) {
+    const upd = () => { const v = readFields($('#sheet')); $('#calcBox').innerHTML = ctx.preview ? ctx.preview(v) : '<h4>試算</h4>' + balanceHtml(v); };
+    $('#sheet').oninput = upd; upd();
+  }
+  const ins = $('#sheet').querySelector('[data-f="投保日期"]');
+  if (ins) {
+    ins.addEventListener('change', () => {  // 投保日期 → 自動帶一年後的到期日
+      if (!ins.value) return;
+      const d = new Date(ins.value); d.setFullYear(d.getFullYear() + 1);
+      const y = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      ['強制險到期', '任意險到期'].forEach(n => { const el = $('#sheet').querySelector(`[data-f="${n}"]`); if (el && !el.value) el.value = y; });
+    });
+    if (ins.value) ins.dispatchEvent(new Event('change'));
+  }
+  $('#sheet').classList.add('open');
+}
+
+function closeStepSheet() { $('#sheet').classList.remove('open'); sheetCtx = null; }
+
+async function submitSheet() {
+  const ctx = sheetCtx; if (!ctx) return;
+  const root = $('#sheet');
+  const vals = readFields(root);
+  const missing = markMissing(root, ctx.specs, vals);
+  if (missing.length) { toast('請填寫：' + missing.join('、')); return; }
+  if (ctx.calc) calcTaxi(vals);
+  closeStepSheet();
+  await ctx.onOk(vals);
+}
+
+function openStepSheet(step) {
+  const { kind, id } = panelState;
+  const r = findRec(kind, id); const f = flowOf(r); const done = !!f[step];
+  if (step === '入車款' && kind !== 'taxi') { openPaySheet(); return; }
+  if (step === '配車' && kind === 'sales' && !done && payInfo(r).paid < ALLOC_MIN) {
+    const i = payInfo(r);
+    openFormSheet({
+      title: '還不能配車', specs: [],
+      hint: `配車前要先收滿 ${fmtMoney(ALLOC_MIN)}。目前已收 ${fmtMoney(i.paid) || '$0'}，還差 ${fmtMoney(ALLOC_MIN - i.paid)}。`,
+      top: `<section class="block calc"><h4>目前收款</h4>${payHtml(r, false)}</section>`,
+      okText: '去記錄收款', onOk: () => openPaySheet(),
+    });
+    return;
+  }
+  const sf = stepForm(step, kind);
+  if (!sf) {
+    if (done) { if (confirm(`取消「${step}」的完成狀態？`)) setStep(step, false, {}); }
+    else setStep(step, true, {});
+    return;
+  }
+  const vals = {};
+  sf.fields.map(parseSpec).forEach(x => {
+    vals[x.name] = r[x.name] || '';
+    if (x.name === sf.date && !vals[x.name]) vals[x.name] = f[step] || todayStr();
+    if (x.required && metaOf(x.name).type === 'date' && !vals[x.name]) vals[x.name] = todayStr();
+  });
+  openFormSheet({
+    title: (done ? '修改：' : '完成：') + step, specs: sf.fields, values: vals, hint: sf.hint, calc: sf.calc,
+    okText: done ? '儲存修改' : '完成這個步驟', onOk: v => setStep(step, true, v),
+    onUndo: done ? () => setStep(step, false, {}) : null, undoText: '取消完成',
+    undoConfirm: `取消「${step}」的完成狀態？已填的資料會保留。`,
+  });
+}
+
+async function setStep(step, done, vals) {
+  const { kind, id } = panelState;
+  const r = JSON.parse(JSON.stringify(findRec(kind, id)));
+  Object.assign(r, vals);
+  const f = flowOf(r); const sf = stepForm(step, kind);
+  if (done) f[step] = (sf && sf.date && r[sf.date]) || f[step] || todayStr();
+  else delete f[step];
+  r['流程'] = f;
+  const wasDone = !!flowOf(findRec(kind, id))[step];
+  const saved = await saveRecord(kind, r, { stay: true, msg: !done ? `已取消：${step}` : wasDone ? `已更新：${step}` : `已完成：${step}` });
+  if (saved && done && !wasDone && sf && sf.after === 'notify') openNotifySheet();
+}
+
+function openNotifySheet() {
+  const { kind, id } = panelState; const r = findRec(kind, id);
+  const car = [r['廠牌'], r['車型']].filter(Boolean).join(' ') + (r['車牌'] ? `（${r['車牌']}）` : '');
+  openFormSheet({
+    title: `LINE 通知${NOTIFY_NAME}可以交車`, specs: ['通知內容*'], okText: '開啟 LINE 傳送',
+    hint: `按下後會開啟 LINE，選「${NOTIFY_NAME}」再按傳送。`,
+    values: { 通知內容: `${NOTIFY_NAME}您好：
+${r['客戶姓名'] || ''} 的 ${car} 已經整備完成，ETAG 和小百貨都好了，可以交車了。` },
+    onOk: v => {
+      const url = 'https://line.me/R/msg/text/?' + encodeURIComponent(v['通知內容']);
+      const w = window.open(url, '_blank'); if (!w) location.href = url;
+      return saveRecord(kind, { ...JSON.parse(JSON.stringify(r)), 整備通知時間: stamp() }, { stay: true, msg: '已開啟 LINE' });
+    },
+  });
+}
+
+/* =========================================================
+   編輯頁
+   ========================================================= */
+function openEditor(kind, id) {
+  const r = id ? JSON.parse(JSON.stringify(findRec(kind, id)))
+    : { 類型: kind === 'taxi' ? '計程車' : '一般', 月份: monthStr(), 流程: {}, 狀態: kind === 'db' ? '已歸檔' : '進行中' };
+  panelState = { mode: 'edit', kind, id: id || null, rec: r };
+  const f = flowOf(r);
+  const steps = kind === 'db' ? [] : stepsOf(kind);
+
+  $('#panel').innerHTML = `
+    <div class="panel-head">
+      <button class="icon-btn" data-act="${id ? 'cancelEdit' : 'back'}" aria-label="取消"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2>${id ? '編輯' : { sales: '新增銷售', taxi: '新增計程車', db: '新增車輛資料' }[kind]}</h2>
+      <button class="btn primary" data-act="save">儲存</button>
+    </div>
+    <div class="panel-body">
+      ${FORM[kind].map(([title, fields]) => `<section class="block"><h4>${title}</h4><div class="grid2">
+        ${fields.map(parseSpec).map(x => fieldHtml(x.name, r[x.name], false, x.label)).join('')}
+      </div></section>`).join('')}
+      ${steps.length ? `<section class="block"><h4>流程完成日期（有必填資料的步驟，存檔時會檢查）</h4><ol class="steps">${steps.map(s => `
+        <li><label style="display:flex;align-items:center;gap:10px;flex:1"><input type="checkbox" data-fstep="${esc(s)}" ${f[s] ? 'checked' : ''} style="width:20px;height:20px">${esc(s)}</label>
+        <input type="date" data-fdate="${esc(s)}" value="${esc(f[s] || '')}"></li>`).join('')}</ol></section>` : ''}
+      ${id ? `<div class="actions"><button class="btn danger" data-act="delete">刪除這筆</button></div>` : ''}
+    </div>`;
+
+  $('#panel').querySelectorAll('[data-fstep]').forEach(cb => cb.addEventListener('change', () => {
+    const d = $('#panel').querySelector(`[data-fdate="${CSS.escape(cb.dataset.fstep)}"]`);
+    if (cb.checked && !d.value) d.value = todayStr();
+    if (!cb.checked) d.value = '';
+  }));
+  $('#panel').querySelectorAll('[data-fdate]').forEach(d => d.addEventListener('change', () => {
+    $('#panel').querySelector(`[data-fstep="${CSS.escape(d.dataset.fdate)}"]`).checked = !!d.value;
+  }));
+  applyShowIf($('#panel'));
+  showPanel();
+}
+
+// 回傳 null 代表有必填沒填
+function collectForm() {
+  const { kind, rec } = panelState;
+  const root = $('#panel');
+  const r = { ...rec, ...readFields(root) };
+  if (kind === 'db') return r;
+  if (kind === 'taxi') calcTaxi(r);
+  const f = {}; const need = [];
+  root.querySelectorAll('[data-fstep]').forEach(cb => {
+    if (!cb.checked) return;
+    const s = cb.dataset.fstep;
+    const d = root.querySelector(`[data-fdate="${CSS.escape(s)}"]`).value || todayStr();
+    const sf = stepForm(s, kind);
+    if (sf) {
+      if (sf.date && !r[sf.date]) r[sf.date] = d;
+      sf.fields.map(parseSpec).filter(x => x.required).forEach(x => { if (!need.includes(x.name + '*')) need.push(x.name + '*'); });
+    }
+    f[s] = (sf && sf.date && r[sf.date]) || d;
+  });
+  if (kind === 'sales' && f['配車'] && !flowOf(rec)['配車'] && payInfo(r).paid < ALLOC_MIN) {
+    toast(`已收 ${fmtMoney(payInfo(r).paid) || '$0'}，要收滿 ${fmtMoney(ALLOC_MIN)} 才能配車`); return null;
+  }
+  const missing = markMissing(root, need, r);
+  if (missing.length) { toast('已完成的步驟需要填：' + missing.join('、')); root.querySelector('.invalid')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return null; }
+  r['流程'] = f;
+  return r;
+}
+
+async function saveRecord(kind, rec, opt = {}) {
+  try {
+    if (kind !== 'taxi') payCalc(rec);
+    const j = await api('save', { sheet: kind, record: rec });
+    upsertLocal(kind, j.record);
+    render();
+    toast(opt.msg || '已儲存');
+    if (opt.stay) openDetail(kind, j.record.id);
+    return j.record;
+  } catch (e) { toast('儲存失敗：' + e.message); return null; }
+}
+
+/* =========================================================
+   事件
+   ========================================================= */
+document.addEventListener('click', async e => {
+  const card = e.target.closest('div[data-open]');
+  if (card && !e.target.closest('a,button')) { const [k, id] = card.dataset.open.split(':'); openDetail(k, id); return; }
+  const t = e.target.closest('button'); if (!t) return;
+
+  if (t.dataset.tab) { tab = t.dataset.tab; store.set('tab', tab); ui.q = ''; render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.month) { ui.salesMonth = t.dataset.month; render(); return; }
+  if (t.dataset.taxi) { ui.taxiFilter = t.dataset.taxi; render(); return; }
+  if (t.dataset.dbf) { ui.dbFilter = t.dataset.dbf; render(); return; }
+  if (t.dataset.open) { const [k, id] = t.dataset.open.split(':'); openDetail(k, id); return; }
+  if (t.dataset.cmonth) { ui.cashMonth = t.dataset.cmonth; render(); return; }
+  if (t.dataset.cashnew) { openCashSheet(t.dataset.cashnew); return; }
+  if (t.dataset.cash) { openCashSheet(null, t.dataset.cash); return; }
+  if (t.dataset.new) { openEditor(t.dataset.new); return; }
+  if (t.id === 'fab') { openEditor(tab); return; }
+  if (t.id === 'syncBtn') { sync(); return; }
+  if (t.hasAttribute('data-opt')) {
+    const on = t.getAttribute('aria-pressed') !== 'true';
+    if (t.parentElement.hasAttribute('data-single')) t.parentElement.querySelectorAll('[data-opt]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    t.setAttribute('aria-pressed', on);
+    applyShowIf(t.closest('#sheet, #panel'));
+    if ($('#sheet').oninput) $('#sheet').oninput(); t.closest('.field')?.classList.remove('invalid'); return; }
+  if (t.dataset.step) { openStepSheet(t.dataset.step); return; }
+  if (t.dataset.sact === 'close') { closeStepSheet(); return; }
+  if (t.dataset.sact === 'ok') { submitSheet(); return; }
+  if (t.dataset.sact === 'undo') { const c = sheetCtx; if (c && confirm(c.undoConfirm)) { closeStepSheet(); c.onUndo(); } return; }
+  if (t.dataset.rper) { ui.renewPeriod = t.dataset.rper; render(); return; }
+  if (t.dataset.rf) { ui.renewFilter = t.dataset.rf; render(); return; }
+  if (t.dataset.ract) { renewAction(t.dataset.ract); return; }
+  if (t.dataset.paydel) {
+    const { kind, id } = panelState; const r = JSON.parse(JSON.stringify(findRec(kind, id)));
+    const ps = payments(r); const p = ps[+t.dataset.paydel];
+    if (!p || !confirm(`刪除這筆收款？\n${fmtD(p.d)}　${p.m}　${fmtMoney(p.a)}`)) return;
+    ps.splice(+t.dataset.paydel, 1);
+    r['收款紀錄'] = ps.map(x => `${x.d}|${x.a}|${x.m}`).join('\n');
+    closeStepSheet();
+    const saved = await saveRecord(kind, r, { stay: true, msg: '已刪除這筆收款' });
+    if (saved) openPaySheet();
+    return;
+  }
+
+  if (t.id === 'saveCfg') {
+    cfg = { url: $('#cfgUrl').value.trim(), key: $('#cfgKey').value };
+    store.set('cfg', cfg);
+    if (cfg.url) { data = { db: [], sales: [], taxi: [] }; await sync(true); toast('已連接 Google 試算表'); } else render();
+    return;
+  }
+  if (t.id === 'clearCache') { localStorage.removeItem('cache'); idb.del('cache').catch(() => {}); toast('已清除，重新同步中'); sync(true); return; }
+
+  const act = t.dataset.act; if (!act || !panelState) return;
+  const { kind, id } = panelState;
+  if (act === 'back') { hidePanel(); return; }
+  if (act === 'edit') { openEditor(kind, id); return; }
+  if (act === 'cancelEdit') { openDetail(kind, id); return; }
+  if (act === 'save') {
+    const rec = collectForm(); if (!rec) return;
+    t.disabled = true;
+    const saved = await saveRecord(kind, rec);
+    t.disabled = false;
+    if (saved) openDetail(kind, saved.id);
+    return;
+  }
+  if (act === 'delete') {
+    if (!confirm('確定刪除這筆資料？試算表中的這一列也會刪除。')) return;
+    try { await api('delete', { sheet: kind, id }); data[kind] = data[kind].filter(x => x.id !== id); saveCache(); hidePanel(); render(); toast('已刪除'); }
+    catch (err) { toast('刪除失敗：' + err.message); }
+    return;
+  }
+  if (act === 'notify') { openNotifySheet(); return; }
+  if (act === 'archive') {
+    const r = findRec('sales', id); const nx = nextStep(r, 'sales'); const rm = pendingReminders(r);
+    const warn = [nx ? `還有步驟沒完成（下一步：${nx}）` : '', ...rm].filter(Boolean);
+    if (!confirm(warn.length ? `注意：\n${warn.join('\n')}\n\n仍要歸檔嗎？` : '歸檔到車輛資料庫？')) return;
+    try {
+      t.disabled = true;
+      const j = await api('archive', { id });
+      data.sales = data.sales.filter(x => x.id !== id); upsertLocal('db', j.record);
+      hidePanel(); render(); toast('已歸檔到車輛資料庫');
+    } catch (err) { t.disabled = false; toast('歸檔失敗：' + err.message); }
+    return;
+  }
+  if (act === 'close' || act === 'reopen') {
+    const r = JSON.parse(JSON.stringify(findRec('taxi', id)));
+    const bal = Number(calcTaxi({ ...r })['車款餘額']) || 0;
+    const warn = [nextStep(r, 'taxi') ? `還有步驟沒完成（${nextStep(r, 'taxi')}）` : '', bal > 0 ? `車款餘額還有 ${fmtMoney(bal)} 沒收` : ''].filter(Boolean);
+    if (act === 'close' && warn.length && !confirm(`注意：\n${warn.join('\n')}\n\n仍要結案嗎？`)) return;
+    r['狀態'] = act === 'close' ? '結案' : '進行中';
+    await saveRecord('taxi', r, { stay: true, msg: act === 'close' ? '已結案' : '已重新開啟' });
+  }
+});
+
+document.addEventListener('keydown', e => { const c = e.target.closest?.('div[data-open]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
+document.getElementById('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeStepSheet(); });
+document.addEventListener('input', e => {
+  e.target.closest('.field')?.classList.remove('invalid');
+  if (e.target.id === 'q') {
+    ui.q = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const q = $('#q'); q.focus(); q.setSelectionRange(pos, pos);
+  }
+});
+
+function showPanel() { const p = $('#panel'); p.classList.add('open'); p.scrollTop = 0; document.body.style.overflow = 'hidden'; }
+function hidePanel() { closeStepSheet(); $('#panel').classList.remove('open'); document.body.style.overflow = ''; panelState = null; }
+
+let toastTimer;
+function toast(msg) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 4000); }
+
+/* 啟動 */
+loadCache().then(() => { render(); sync(true); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !panelState) sync(true); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
