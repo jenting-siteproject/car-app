@@ -34,12 +34,12 @@
   }
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html,body{min-height:100%;margin:0}
 body{
   color:var(--ink);
   font:15px/1.65 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
   -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;
-  padding-bottom:calc(82px + env(safe-area-inset-bottom,0px));
+  padding-bottom:0;
 }
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -63,7 +63,7 @@ header h1{font-size:21px;margin:0;flex:1;line-height:1.2}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin svg{animation:none}}
 
-main{padding:14px 16px 28px;max-width:720px;margin:0 auto}
+main{padding:14px 16px calc(170px + env(safe-area-inset-bottom,0px));max-width:720px;margin:0 auto}   /* 底部留空：讓最後一筆可以捲到選單和新增按鈕上方 */
 
 /* 車牌 */
 .plate{

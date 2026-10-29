@@ -1,5 +1,5 @@
 // 離線快取：App 本體先抓網路，失敗才用快取；資料由 App 自己存在手機上
-const CACHE = 'car-pwa-v16';
+const CACHE = 'car-pwa-v17';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
