@@ -63,7 +63,7 @@ header h1{font-size:21px;margin:0;flex:1;line-height:1.2}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin svg{animation:none}}
 
-main{padding:14px 16px calc(170px + env(safe-area-inset-bottom,0px));max-width:720px;margin:0 auto}   /* 底部留空：讓最後一筆可以捲到選單和新增按鈕上方 */
+main{padding:14px 16px 28px;max-width:720px;margin:0 auto}
 
 /* 車牌 */
 .plate{
@@ -311,6 +311,19 @@ input::-webkit-date-and-time-value{text-align:left}
 main,.panel-body,.sheet-body{overflow-x:clip}
 .item,section.block,.spec,.spec > div,dd,.pays li span,.pays li b{min-width:0;overflow-wrap:anywhere}
 .plate{max-width:100%}
+
+/* ===== App 版面：上方標題、中間捲動、下方選單（選單不再蓋住內容） ===== */
+html,body{height:100%;overflow:hidden}
+body{display:flex;flex-direction:column;height:100vh;height:100dvh;padding-bottom:0}
+header{position:relative;flex:none}
+main{
+  flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  width:100%;max-width:none;margin:0;
+  padding:14px max(16px, calc((100% - 688px) / 2)) 96px;   /* 底部留空給「新增」按鈕 */
+}
+nav{position:relative;flex:none;left:auto;right:auto;bottom:auto}
+.fab{bottom:calc(env(safe-area-inset-bottom,0px) + 86px)}
+.app-ver{color:var(--mute);font-size:13px;text-align:center;margin:8px 0 0}
 </style>
 
 </head>
@@ -1045,6 +1058,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
+      <p class="app-ver">App 版本 v18</p>
     </section>`;
 }
 
@@ -1368,7 +1382,7 @@ document.addEventListener('click', async e => {
   if (card && !e.target.closest('a,button')) { const [k, id] = card.dataset.open.split(':'); openDetail(k, id); return; }
   const t = e.target.closest('button'); if (!t) return;
 
-  if (t.dataset.tab) { tab = t.dataset.tab; store.set('tab', tab); ui.q = ''; render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) { tab = t.dataset.tab; store.set('tab', tab); ui.q = ''; render(); $('#view').scrollTop = 0; return; }
   if (t.dataset.month) { ui.salesMonth = t.dataset.month; render(); return; }
   if (t.dataset.taxi) { ui.taxiFilter = t.dataset.taxi; render(); return; }
   if (t.dataset.dbf) { ui.dbFilter = t.dataset.dbf; render(); return; }
