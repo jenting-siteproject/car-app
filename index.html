@@ -211,6 +211,16 @@ a.tel{color:var(--brand);font-weight:700;text-decoration:underline}
 .field.invalid .multi{outline:3px solid var(--red);outline-offset:5px;border-radius:10px}
 .multi{display:flex;flex-wrap:wrap;gap:8px}
 .pct{display:flex;align-items:center;gap:8px}
+.pct-btn{width:100%;margin-bottom:14px;border-color:var(--brand);color:var(--brand)}
+.pct-result{text-align:center;padding:6px 0 14px;margin-bottom:6px;border-bottom:2px solid var(--line)}
+.pct-result span{display:block;font-weight:700;color:var(--mute)}
+.pct-result b{display:block;font:700 54px/1.1 var(--plate-font);color:var(--brand)}
+.pct-result em{display:block;font-style:normal;font-weight:700;font-size:17px}
+.pct-result.good em{color:var(--green)}
+.pct-result.bad b,.pct-result.bad em{color:var(--red)}
+.pct-line{margin-bottom:12px}
+.pct-line b{display:block;font:700 44px/1.1 var(--plate-font);color:var(--brand);white-space:nowrap}
+.pct-line span{display:block;color:var(--mute);font-size:15px;margin-top:4px}
 .cash-hero{border-left:8px solid var(--green)}
 .cash-hero.low{border-color:var(--red);background:var(--red-soft)}
 .cash-amt{font:700 56px/1.05 var(--plate-font);color:var(--ink);margin:4px 0 6px}
@@ -432,6 +442,8 @@ const FIELD_META = {
   項目: { ph: '例如 ABC-1234 領牌規費' }, 備註: { ph: '可不填' },
   支出分類: { type: 'multi', single: true, options: CASH_OUT_CATS },
   存入來源: { type: 'multi', single: true, options: CASH_IN_CATS },
+  總價: { type: 'money', ph: '客人付的總金額' }, 車價: { type: 'money', ph: '牌價' },
+  配件成本: { type: 'money', ph: '沒有填 0' }, 補貼息: { type: 'money', ph: '零利率才有，沒有填 0' },
   成交價: { type: 'money', ph: '例如 985000' }, 訂金金額: { type: 'money' }, 訂金日期: { type: 'date' },
   收款日期: { type: 'date' }, 收款金額: { type: 'money' },
   收款方式: { type: 'multi', single: true, options: ['現金', '匯款', '刷卡', '貸款撥款', '其他'] },
@@ -562,6 +574,54 @@ function payHtml(r, withDelete) {
   </ul>`;
 }
 function oweText(r) { const i = payInfo(r); return i.left > 0 ? `尚欠車款 ${fmtMoney(i.left)}` : ''; }
+
+/* ---------- 趴數試算 ----------
+   總價 = 車價 × 趴數% + 配件成本 + 補貼息
+   → 最少要報的趴數% = (總價 − 配件成本 − 補貼息) ÷ 車價 × 100（小數第二位無條件進位，確保不賠） */
+const pctFmt = n => n.toFixed(2).replace(/\.?0+$/, '') + '%';
+function pctCalc(v) {
+  const total = Number(v['總價']) || 0, price = Number(v['車價']) || 0;
+  const acc = Number(v['配件成本']) || 0, sub = Number(v['補貼息']) || 0;
+  if (!total || !price) return null;
+  const carPart = total - acc - sub;
+  const pct = Math.ceil(carPart / price * 10000 - 1e-9) / 100;   // 進位到 0.01%
+  return { total, price, acc, sub, carPart, pct, exact: carPart / price * 100, check: Math.round(price * pct / 100) + acc + sub };
+}
+function pctHtml(v) {
+  const c = pctCalc(v);
+  if (!c) return '<p class="muted" style="margin:0">填入總價和車價，就會算出最少要報幾 %。</p>';
+  if (c.carPart <= 0) return `<div class="pct-result bad"><span>配件成本加補貼息已經超過總價</span><b>無法不賠</b><em>總價至少要高於 ${fmtMoney(c.acc + c.sub)}</em></div>`;
+  return `<div class="pct-result good">
+      <span>最少要報</span><b>${pctFmt(c.pct)}</b>
+      <em>報這個趴數剛好不賠錢</em>
+    </div>
+    <ul class="pays">
+      <li><span>總價</span><b>${fmtMoney(c.total)}</b></li>
+      <li><span>− 配件成本</span><b>${fmtMoney(c.acc) || '$0'}</b></li>
+      <li><span>− 補貼息</span><b>${fmtMoney(c.sub) || '$0'}</b></li>
+      <li class="sum"><span>= 車價部分</span><b>${fmtMoney(c.carPart)}</b></li>
+      <li><span>÷ 車價</span><b>${fmtMoney(c.price)}</b></li>
+    </ul>
+    <p class="muted" style="margin:10px 0 0">${Math.abs(c.exact - c.pct) > 1e-9 ? `精確值 ${c.exact.toFixed(4)}%，進位到小數第二位，確保不賠。<br>` : ''}驗算：車價 × ${pctFmt(c.pct)} + 配件成本 + 補貼息 = ${fmtMoney(c.check)}</p>`;
+}
+function openPctSheet(kind, id) {
+  const r = id ? findRec(kind, id) : null;
+  openFormSheet({
+    title: r ? `趴數試算：${r['客戶姓名'] || '這台車'}` : '趴數試算',
+    hint: '總價 = 車價 × 趴數 + 配件成本 + 補貼息（零利率貸款才有）。填入數字，算出最少要報幾 %。',
+    specs: ['總價*', '車價*', '配件成本', '補貼息'],
+    values: r ? { 總價: r['總價'] || r['成交價'] || '', 車價: r['車價'] || '', 配件成本: r['配件成本'] || '', 補貼息: r['補貼息'] || '' } : {},
+    preview: v => pctHtml(v),
+    okText: r ? '存到這台車' : '完成',
+    onOk: v => {
+      if (!r) return;
+      const c = pctCalc(v); const n = JSON.parse(JSON.stringify(r));
+      Object.assign(n, { 總價: v['總價'], 車價: v['車價'], 配件成本: v['配件成本'] || '0', 補貼息: v['補貼息'] || '0', 趴數: c && c.carPart > 0 ? String(c.pct) : '' });
+      if (!n['成交價']) n['成交價'] = v['總價'];
+      return saveRecord(kind, n, { stay: true, msg: c && c.carPart > 0 ? `已存：最少要報 ${pctFmt(c.pct)}` : '已儲存' });
+    },
+  });
+}
 
 function openPaySheet() {
   const { kind, id } = panelState; const r = findRec(kind, id); const f = flowOf(r);
@@ -740,7 +800,8 @@ function viewSales() {
   const waitingPlate = rows.filter(r => !plateDone(r, 'sales')).length;
   const ready = rows.filter(r => !nextStep(r, 'sales')).length;
 
-  return monthEndAlert('sales')
+  return `<button class="btn pct-btn" data-pct="new">趴數試算</button>`
+    + monthEndAlert('sales')
     + `<div class="chips">${['全部', ...months].map(m => `<button class="chip" data-month="${esc(m)}" aria-pressed="${ui.salesMonth === m}">${m === '全部' ? '全部' : fmtMonth(m)}</button>`).join('')}</div>`
     + `<p class="summary"><span><strong>${rows.length}</strong>台進行中</span><span><strong>${waitingPlate}</strong>待領牌</span><span><strong>${ready}</strong>可歸檔</span>${(() => { const o = rows.map(r => payInfo(r).left).filter(v => v > 0); const t = o.reduce((a, b) => a + b, 0); return t ? `<span class="owe">未收車款 <strong>${fmtMoney(t)}</strong>（${o.length} 台）</span>` : ''; })()}</p>`
     + (rows.length ? `<div class="list">${rows.map(r => {
@@ -1058,7 +1119,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v18</p>
+      <p class="app-ver">App 版本 v20</p>
     </section>`;
 }
 
@@ -1170,6 +1231,7 @@ function openDetail(kind, id) {
       <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
       <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl></section>
       ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
+      ${kind !== 'taxi' ? `<section class="block"><h4>最少要報趴數</h4>${r['趴數'] ? `<div class="pct-line"><b>${esc(pctFmt(Number(r['趴數'])))}</b><span>總價 ${fmtMoney(r['總價'])}　車價 ${fmtMoney(r['車價'])}<br>配件成本 ${fmtMoney(r['配件成本']) || '$0'}　補貼息 ${fmtMoney(r['補貼息']) || '$0'}</span></div>` : '<p class="muted" style="margin:0 0 10px">還沒試算</p>'}<button class="btn" data-pct="${kind}:${esc(r.id)}">${r['趴數'] ? '重新試算' : '試算這台的趴數'}</button></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>加裝配件</h4>${acc.length ? `<div class="tags">${acc.map(a => `<span class="tag">${esc(a)}</span>`).join('')}</div>` : '<span class="muted">尚未填寫</span>'}</section>
       <section class="block"><h4>保險</h4>${hasIns ? `<dl>${row('投保日期', esc(r['投保日期']))}${row('保險公司', esc(r['保險公司']))}${row('險種', esc(r['險種']))}${row('保險金額', esc(fmtMoney(r['保險金額'])))}${row('強制險到期', esc(r['強制險到期']))}${row('任意險到期', esc(r['任意險到期']))}</dl>` : '<span class="muted">尚未填寫</span>'}</section>` : ''}
       ${kind === 'taxi' ? `<section class="block"><h4>拖車</h4>${r['拖車安排日'] || r['拖車抵達日'] ? `<dl>${row('安排日', esc(r['拖車安排日']))}${row('抵達日', esc(r['拖車抵達日']))}</dl>` : '<span class="muted">尚未安排</span>'}</section>
@@ -1388,6 +1450,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.dbf) { ui.dbFilter = t.dataset.dbf; render(); return; }
   if (t.dataset.open) { const [k, id] = t.dataset.open.split(':'); openDetail(k, id); return; }
   if (t.dataset.cmonth) { ui.cashMonth = t.dataset.cmonth; render(); return; }
+  if (t.dataset.pct) { if (t.dataset.pct === 'new') openPctSheet(); else { const [k, id] = t.dataset.pct.split(':'); openPctSheet(k, id); } return; }
   if (t.dataset.cashnew) { openCashSheet(t.dataset.cashnew); return; }
   if (t.dataset.cash) { openCashSheet(null, t.dataset.cash); return; }
   if (t.dataset.new) { openEditor(t.dataset.new); return; }
