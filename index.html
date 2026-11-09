@@ -221,6 +221,16 @@ a.tel{color:var(--brand);font-weight:700;text-decoration:underline}
 .pct-line{margin-bottom:12px}
 .pct-line b{display:block;font:700 44px/1.1 var(--plate-font);color:var(--brand);white-space:nowrap}
 .pct-line span{display:block;color:var(--mute);font-size:15px;margin-top:4px}
+.pw-row{border:2px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--paper)}
+.pw-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.pw-name{flex:1;min-width:0;border:0;background:none;padding:4px 0;text-align:left;font-weight:700;font-size:18px;color:var(--ink)}
+.pw-name small{display:block;font-weight:400;font-size:12px;color:var(--mute)}
+.pw-line{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed var(--line)}
+.pw-line span{flex:none;width:2.6em;color:var(--mute);font-size:14px}
+.pw-line b{flex:1;min-width:0;font-size:17px;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.pw-line b.dots{letter-spacing:.1em;color:var(--mute)}
+.btn.mini2{min-height:40px;padding:6px 12px;font-size:15px;flex:none;text-decoration:none;display:inline-flex;align-items:center}
+.pays.imp li span small{display:block;font-size:13px;color:var(--mute);font-weight:400}
 .cash-hero{border-left:8px solid var(--green)}
 .cash-hero.low{border-color:var(--red);background:var(--red-soft)}
 .cash-amt{font:700 56px/1.05 var(--plate-font);color:var(--ink);margin:4px 0 6px}
@@ -439,6 +449,8 @@ const FIELD_META = {
   小百貨已安裝: { type: 'check' }, 交車已上傳: { type: 'check' }, 不聯繫已註記: { type: 'check' },
   洗車工單號碼: { upper: true }, 通知內容: { type: 'textarea' },
   金額: { type: 'money', ph: '例如 1500' }, 日期: { type: 'date' },
+  系統名稱: { ph: '例如 原廠 EIP' }, 網址: { type: 'url', raw: true, ph: '可不填' },
+  帳號: { raw: true }, 密碼: { raw: true },
   項目: { ph: '例如 ABC-1234 領牌規費' }, 備註: { ph: '可不填' },
   支出分類: { type: 'multi', single: true, options: CASH_OUT_CATS },
   存入來源: { type: 'multi', single: true, options: CASH_IN_CATS },
@@ -496,8 +508,8 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
 let cfg = store.get('cfg', { url: '', key: '' });
-let data = { db: [], sales: [], taxi: [], cash: [] };
-const fixData = d => { ['db', 'sales', 'taxi', 'cash'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; }); return d; };
+let data = { db: [], sales: [], taxi: [], cash: [], pw: [] };
+const fixData = d => { ['db', 'sales', 'taxi', 'cash', 'pw'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; }); return d; };
 
 /* ---------- 離線暫存：IndexedDB（容量大，可存上萬筆） ---------- */
 const idb = {
@@ -686,6 +698,7 @@ async function api(action, payload = {}) {
 function demoApi(action, p) {
   const d = store.get('demo', null) || seedDemo();
   if (!d.cash) d.cash = seedDemo().cash;
+  if (!d.pw) d.pw = seedDemo().pw;
   let out = { ok: true };
   if (action === 'list') out.data = d;
   if (action === 'save') {
@@ -697,6 +710,15 @@ function demoApi(action, p) {
     out.record = r;
   }
   if (action === 'delete') d[p.sheet] = d[p.sheet].filter(x => x.id !== p.id);
+  if (action === 'bulk') {
+    const seen = new Set([...d.db, ...d.sales, ...d.taxi].map(x => x['訂單編號']).filter(Boolean));
+    out.added = 0; out.skipped = 0;
+    p.items.forEach(({ sheet, record }) => {
+      if (record['訂單編號'] && seen.has(record['訂單編號'])) { out.skipped++; return; }
+      seen.add(record['訂單編號']);
+      d[sheet].push({ ...record, id: Math.random().toString(36).slice(2, 10), 建立時間: stamp(), 更新時間: stamp() }); out.added++;
+    });
+  }
   if (action === 'archive') {
     const r = d.sales.find(x => x.id === p.id);
     Object.assign(r, { 狀態: '已歸檔', 歸檔時間: stamp() });
@@ -722,6 +744,9 @@ function seedDemo() {
       { id: 'demo6', 類型: '一般', 月份: '2025-07', 客戶姓名: '李先生', 電話: '0966222333', 車牌: 'BXZ-3302', 廠牌: 'Toyota', 車型: 'Altis', 投保日期: '2025-07-02', 險種: '強制險、甲式車體', 保險金額: '31000', 任意險到期: '2026-07-02', 續保狀態: '未續保', 未續保原因: '轉給別家續保', 流程: {}, 狀態: '已歸檔' },
       { id: 'demo7', 類型: '一般', 月份: '2025-09', 客戶姓名: '黃小姐', 電話: '0977333444', 車牌: 'RAB-8899', 廠牌: 'Toyota', 車型: 'Sienta', 投保日期: '2025-09-10', 險種: '強制險、丙式車體', 保險金額: '15000', 任意險到期: '2026-09-10', 流程: {}, 狀態: '已歸檔' },
       { id: 'demo8', 類型: '一般', 月份: '2025-06', 客戶姓名: '吳先生', 電話: '0988444555', 車牌: 'BWW-5566', 廠牌: 'Toyota', 車型: 'Town Ace', 投保日期: '2025-06-15', 險種: '強制險、竊盜險', 保險金額: '9800', 任意險到期: '2026-06-15', 續保狀態: '已續保', 續保日期: '2026-06-10', 續保險種: '強制險、竊盜險', 續保金額: '9500', 流程: {}, 狀態: '已歸檔' },
+    ],
+    pw: [
+      { id: 'p1', 系統名稱: '範例：原廠 EIP', 網址: '', 帳號: 'demo01', 密碼: 'Demo-1234', 備註: '這是示範資料' },
     ],
     cash: (() => { const m = monthStr(); return [
       { id: 'c1', 日期: m + '-01', 類型: '存入', 分類: '公司撥補', 項目: '', 金額: '10000', 建立時間: m + '-01 09:00' },
@@ -846,6 +871,146 @@ function viewTaxi() {
         </button>`;
       }).join('')}</div>`
       : `<div class="empty">${ui.taxiFilter === '進行中' ? '目前沒有進行中的計程車。' : '沒有符合的紀錄。'}<br><button class="btn primary" data-new="taxi">新增計程車</button></div>`);
+}
+
+/* ---------- 帳號密碼 ---------- */
+const pwShown = new Set();
+function pwSection() {
+  const list = [...data.pw].sort((a, b) => (a['系統名稱'] || '').localeCompare(b['系統名稱'] || '', 'zh-Hant'));
+  return `<section class="block pw-box">
+    <h4>帳號密碼</h4>
+    ${list.length ? list.map(r => {
+      const url = r['網址'] ? (/^https?:\/\//i.test(r['網址']) ? r['網址'] : 'https://' + r['網址']) : '';
+      const show = pwShown.has(r.id);
+      return `<div class="pw-row">
+        <div class="pw-head"><button class="pw-name" data-pwedit="${esc(r.id)}">${esc(r['系統名稱'] || '未命名')}<small>點這裡修改</small></button>
+          ${url ? `<a class="btn mini2" href="${esc(url)}" target="_blank" rel="noopener">開啟網站</a>` : ''}</div>
+        <div class="pw-line"><span>帳號</span><b>${esc(r['帳號'])}</b><button class="btn mini2" data-copy="帳號:${esc(r.id)}">複製</button></div>
+        <div class="pw-line"><span>密碼</span><b class="${show ? '' : 'dots'}">${show ? esc(r['密碼']) : '●●●●●●'}</b>
+          <button class="btn mini2" data-pwshow="${esc(r.id)}">${show ? '隱藏' : '顯示'}</button><button class="btn mini2" data-copy="密碼:${esc(r.id)}">複製</button></div>
+        ${r['備註'] ? `<div class="muted">${esc(r['備註'])}</div>` : ''}
+      </div>`; }).join('') : '<p class="muted" style="margin:0 0 10px">還沒有記錄任何帳號密碼。</p>'}
+    <button class="btn wide" data-pwnew style="width:100%;margin-top:10px">＋ 新增帳號密碼</button>
+  </section>`;
+}
+function openPwSheet(id) {
+  const r = id ? data.pw.find(x => x.id === id) : null;
+  openFormSheet({
+    title: r ? '修改帳號密碼' : '新增帳號密碼', specs: ['系統名稱*', '帳號*', '密碼*', '網址', '備註'], values: r || {},
+    okText: '儲存',
+    onOk: v => savePw({ ...(r || {}), ...v }),
+    onUndo: r ? () => deletePw(r.id) : null, undoText: '刪除這筆', undoConfirm: r ? `刪除「${r['系統名稱']}」的帳號密碼？` : '',
+  });
+}
+async function savePw(rec) {
+  try { const j = await api('save', { sheet: 'pw', record: rec }); upsertLocal('pw', j.record); render(); toast('已儲存'); }
+  catch (e) { toast('儲存失敗：' + e.message); }
+}
+async function deletePw(id) {
+  try { await api('delete', { sheet: 'pw', id }); data.pw = data.pw.filter(x => x.id !== id); saveCache(); render(); toast('已刪除'); }
+  catch (e) { toast('刪除失敗：' + e.message); }
+}
+async function copyText(text, what) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove();
+  }
+  toast(`已複製${what}`);
+}
+
+/* ---------- 匯入原廠受訂報告（PSLD090） ---------- */
+const XLSX_URLS = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];   // 第一個失敗就用第二個
+const TAXI_NAME = /交通|計程車|的士/;          // 領照人名稱有這些字 → 歸到計程車
+const SKIP_STATUS = ['暫退', '退訂'];          // 這些狀態不匯入
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  const tryAt = i => new Promise((res, rej) => {
+    if (i >= XLSX_URLS.length) return rej(new Error('讀檔工具下載失敗，請確認有網路'));
+    const sc = document.createElement('script'); sc.src = XLSX_URLS[i];
+    sc.onload = () => window.XLSX ? res() : tryAt(i + 1).then(res, rej);
+    sc.onerror = () => { sc.remove(); tryAt(i + 1).then(res, rej); };
+    document.head.appendChild(sc);
+  });
+  return tryAt(0);
+}
+const numOf = v => Math.round(Number(String(v ?? '').replace(/[^\d.-]/g, '')) || 0);
+function dateOf(v) {
+  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+  const m = String(v || '').trim().match(/^(\d{2,4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (!m) return '';
+  let y = +m[1]; if (y < 1000) y += 1911;   // 民國年
+  return `${y}-${pad(m[2])}-${pad(m[3])}`;
+}
+async function readOrderReport(file) {
+  await loadXlsx();
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+  const hi = rows.findIndex(r => r.includes('訂單編號') && r.includes('領照人'));
+  if (hi < 0) throw new Error('看不懂這個檔案：找不到「訂單編號」「領照人」欄位，請確認是受訂報告');
+  const H = rows[hi].map(h => String(h).trim());
+  return rows.slice(hi + 1).map(r => Object.fromEntries(H.map((h, i) => [h, String(r[i] ?? '').trim()]))).filter(o => o['訂單編號']);
+}
+function planImport(list) {
+  const have = new Set([...data.db, ...data.sales, ...data.taxi].map(x => x['訂單編號']).filter(Boolean));
+  const plan = { items: [], salesNew: 0, taxiNew: 0, dbDone: 0, taxiDone: 0, skipped: [], dup: 0 };
+  list.forEach(o => {
+    const st = o['訂單狀態'];
+    if (SKIP_STATUS.includes(st)) { plan.skipped.push(o); return; }
+    if (have.has(o['訂單編號'])) { plan.dup++; return; }
+    have.add(o['訂單編號']);
+    const date = dateOf(o['受訂日']), price = numOf(o['成交價']), dep = numOf(o['定金']), acc = numOf(o['合約配件$']);
+    const isTaxi = TAXI_NAME.test(o['領照人']), done = st === '交車';
+    const r = {
+      訂單編號: o['訂單編號'], 受訂日: date, 月份: date.slice(0, 7), 客戶姓名: o['領照人'], 電話: o['電話'],
+      廠牌: 'Toyota', 車型: o['車名'], 型號: [o['車型'], o['SFX']].filter(Boolean).join(' '), 契約書號: o['契約書流水號'],
+      訂約人: o['訂約人姓名'], 使用人: o['使用人姓名'], 原廠狀態: st, 合約配件金額: acc ? String(acc) : '',
+      特殊備註: o['備註'], 流程: {},
+    };
+    if (isTaxi) {
+      Object.assign(r, { 類型: '計程車', 價位: price ? String(price) : '', 折扣: '0', 狀態: done ? '結案' : '進行中',
+        已付金額: done ? String(price) : dep ? String(dep) : '' });
+      calcTaxi(r); plan.items.push({ sheet: 'taxi', record: r }); done ? plan.taxiDone++ : plan.taxiNew++;
+    } else {
+      Object.assign(r, { 類型: '一般', 成交價: price ? String(price) : '', 訂金金額: dep ? String(dep) : '', 訂金日期: dep ? date : '' });
+      if (done) {
+        Object.assign(r, { 狀態: '已歸檔', 歸檔時間: stamp() });
+        if (price > dep) r['收款紀錄'] = `${date}|${price - dep}|已交車（匯入時視為付清）`;
+      } else r['狀態'] = '進行中';
+      payCalc(r); plan.items.push({ sheet: done ? 'db' : 'sales', record: r }); done ? plan.dbDone++ : plan.salesNew++;
+    }
+  });
+  return plan;
+}
+async function startImport(file) {
+  let list;
+  try { toast('讀取檔案中…'); list = await readOrderReport(file); }
+  catch (e) { toast(e.message); return; }
+  const p = planImport(list);
+  const line = (label, n, note = '') => `<li><span>${label}${note ? `<small>${note}</small>` : ''}</span><b>${n} 筆</b></li>`;
+  openFormSheet({
+    title: '匯入受訂報告', specs: [],
+    top: `<section class="block calc"><h4>${esc(file.name)}：共 ${list.length} 張訂單</h4><ul class="pays imp">
+      ${line('本月銷售（進行中）', p.salesNew)}
+      ${line('計程車（進行中）', p.taxiNew)}
+      ${line('車輛資料庫', p.dbDone, '已交車的一般車')}
+      ${line('計程車（已結案）', p.taxiDone, '已交車的計程車')}
+      ${line('不匯入', p.skipped.length, SKIP_STATUS.join('、') + '的訂單')}
+      ${line('已經匯入過', p.dup, '同一張訂單編號，略過')}
+      </ul>
+      <p class="muted" style="margin:10px 0 0">領照人名稱有「交通」「計程車」「的士」的歸到計程車。身分證字號、虛擬帳號不會匯入。</p></section>`,
+    okText: p.items.length ? `匯入 ${p.items.length} 筆` : '沒有新資料，關閉',
+    onOk: async () => {
+      if (!p.items.length) return;
+      try {
+        toast(`匯入中，請稍候…（${p.items.length} 筆）`);
+        const j = await api('bulk', { items: p.items });
+        await sync(true);
+        toast(`匯入完成：新增 ${j.added} 筆${j.skipped ? `，略過 ${j.skipped} 筆重複` : ''}`);
+      } catch (e) { toast('匯入失敗：' + e.message); }
+    },
+  });
 }
 
 /* ---------- 零用金 ---------- */
@@ -1067,7 +1232,7 @@ function renewAction(act) {
 
 function norm(s) { return String(s ?? '').toLowerCase().replace(/[\s\-_.·]/g, ''); }
 function matches(r, q) {
-  const hay = norm(['車牌', '客戶姓名', '電話', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼', '配件', '保險公司', '特殊備註', '月份', '領牌日', '交車日'].map(f => r[f]).join('|'));
+  const hay = norm(['訂單編號', '契約書號', '訂約人', '使用人', '型號', '車牌', '客戶姓名', '電話', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼', '配件', '保險公司', '特殊備註', '月份', '領牌日', '交車日'].map(f => r[f]).join('|'));
   return norm(q).split('').length === 0 || q.trim().split(/\s+/).every(w => hay.includes(norm(w)));
 }
 
@@ -1107,7 +1272,13 @@ function viewDb() {
 }
 
 function viewSettings() {
-  return `<section class="block">
+  return pwSection() + `<section class="block">
+      <h4>匯入原廠受訂報告</h4>
+      <p class="muted" style="margin:0 0 10px">選原廠系統匯出的受訂報告（PSLD090，.xls）。同一張訂單匯入過就會略過，可以每個月重複匯入。</p>
+      <button class="btn primary wide" id="importBtn" style="width:100%">選擇檔案匯入</button>
+      <input type="file" id="importFile" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    </section>
+    <section class="block">
       <h4>連接 Google 試算表</h4>
       <label class="field"><span>Apps Script 網址</span><input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url)}"></label>
       <label class="field"><span>密碼（與 Code.gs 裡的 API_KEY 相同）</span><input id="cfgKey" type="password" value="${esc(cfg.key)}"></label>
@@ -1125,7 +1296,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v22</p>
+      <p class="app-ver">App 版本 v24</p>
     </section>`;
 }
 
@@ -1156,7 +1327,7 @@ function fieldHtml(name, value, required, shown) {
   if (type === 'check') return `<label class="field check wide"><input type="checkbox" data-f="${esc(name)}" ${v ? 'checked' : ''}><span>${esc(shown)}${required ? ' <b class="req">必填</b>' : ''}</span></label>`;
   if (type === 'textarea') return `<label class="field wide">${label}<textarea data-f="${esc(name)}" placeholder="${esc(m.ph || '')}">${esc(v)}</textarea></label>`;
   const attrs = type === 'money' ? 'type="text" inputmode="numeric"' : `type="${type}"`;
-  return `<label class="field">${label}<input data-f="${esc(name)}" ${attrs} placeholder="${esc(m.ph || '')}" value="${esc(v)}" ${m.upper ? 'autocapitalize="characters"' : ''}></label>`;
+  return `<label class="field">${label}<input data-f="${esc(name)}" ${attrs} placeholder="${esc(m.ph || '')}" value="${esc(v)}" ${m.upper ? 'autocapitalize="characters"' : ''}${m.raw ? ' autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"' : ''}></label>`;
 }
 
 function readFields(root) {
@@ -1236,6 +1407,7 @@ function openDetail(kind, id) {
         </li>`).join('')}</ol></section>` : ''}
       <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
       <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl></section>
+      ${r['訂單編號'] ? `<section class="block"><h4>原廠訂單</h4><dl>${row('訂單編號', esc(r['訂單編號']), 'vin')}${row('受訂日', esc(fmtD(r['受訂日'])))}${row('型號', esc(r['型號']))}${row('契約書號', esc(r['契約書號']), 'vin')}${row('訂約人', esc(r['訂約人']))}${row('使用人', esc(r['使用人']))}${row('合約配件', esc(fmtMoney(r['合約配件金額'])))}${row('原廠狀態', esc(r['原廠狀態']))}</dl></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>最少要報趴數</h4>${r['趴數'] !== '' && r['趴數'] != null ? `<div class="pct-line"><b>${esc(repFmt(Number(r['趴數'])))}</b><span>${esc(repNote(Number(r['趴數'])))}<br>總價 ${fmtMoney(r['總價'])}　車價 ${fmtMoney(r['車價'])}<br>配件成本 ${fmtMoney(r['配件成本']) || '$0'}　補貼息 ${fmtMoney(r['補貼息']) || '$0'}</span></div>` : '<p class="muted" style="margin:0 0 10px">還沒試算</p>'}<button class="btn" data-pct="${kind}:${esc(r.id)}">${r['趴數'] !== '' && r['趴數'] != null ? '重新試算' : '試算這台的趴數'}</button></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>加裝配件</h4>${acc.length ? `<div class="tags">${acc.map(a => `<span class="tag">${esc(a)}</span>`).join('')}</div>` : '<span class="muted">尚未填寫</span>'}</section>
@@ -1457,6 +1629,11 @@ document.addEventListener('click', async e => {
   if (t.dataset.open) { const [k, id] = t.dataset.open.split(':'); openDetail(k, id); return; }
   if (t.dataset.cmonth) { ui.cashMonth = t.dataset.cmonth; render(); return; }
   if (t.dataset.pct) { if (t.dataset.pct === 'new') openPctSheet(); else { const [k, id] = t.dataset.pct.split(':'); openPctSheet(k, id); } return; }
+  if (t.id === 'importBtn') { $('#importFile').value = ''; $('#importFile').click(); return; }
+  if (t.hasAttribute('data-pwnew')) { openPwSheet(); return; }
+  if (t.dataset.pwedit) { openPwSheet(t.dataset.pwedit); return; }
+  if (t.dataset.pwshow) { const id = t.dataset.pwshow; pwShown.has(id) ? pwShown.delete(id) : pwShown.add(id); render(); return; }
+  if (t.dataset.copy) { const [f, id] = t.dataset.copy.split(':'); const r = data.pw.find(x => x.id === id); if (r) copyText(r[f] || '', f); return; }
   if (t.dataset.cashnew) { openCashSheet(t.dataset.cashnew); return; }
   if (t.dataset.cash) { openCashSheet(null, t.dataset.cash); return; }
   if (t.dataset.new) { openEditor(t.dataset.new); return; }
@@ -1488,7 +1665,7 @@ document.addEventListener('click', async e => {
   }
 
   if (t.id === 'saveCfg') {
-    cfg = { url: $('#cfgUrl').value.trim(), key: $('#cfgKey').value };
+    cfg = { url: $('#cfgUrl').value.trim(), key: $('#cfgKey').value.trim() };
     store.set('cfg', cfg);
     if (cfg.url) { data = { db: [], sales: [], taxi: [] }; await sync(true); toast('已連接 Google 試算表'); } else render();
     return;
@@ -1538,6 +1715,7 @@ document.addEventListener('click', async e => {
 });
 
 document.addEventListener('keydown', e => { const c = e.target.closest?.('div[data-open]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
+document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]) startImport(e.target.files[0]); });
 document.getElementById('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeStepSheet(); });
 document.addEventListener('input', e => {
   e.target.closest('.field')?.classList.remove('invalid');
