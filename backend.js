@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v29';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v30';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -227,8 +227,13 @@ function ocr_(b64, mime) {
                '\r\n--' + boundary + '\r\nContent-Type: ' + (mime || 'image/jpeg') + '\r\n\r\n';
   const tail = '\r\n--' + boundary + '--';
   const payload = [].concat(Utilities.newBlob(head).getBytes(), Utilities.base64Decode(b64), Utilities.newBlob(tail).getBytes());
-  const up = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=zh&fields=id', {
-    method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: payload, headers: auth, muteHttpExceptions: true });
+  // 辨識語言：依序試，Google 不接受（400）就換下一個；最後一個是讓 Google 自動判斷
+  let up = null;
+  for (const lang of ['zh-TW', 'zh', '']) {
+    up = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id' + (lang ? '&ocrLanguage=' + lang : ''), {
+      method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: payload, headers: auth, muteHttpExceptions: true });
+    if (up.getResponseCode() !== 400) break;
+  }
   if (up.getResponseCode() !== 200) throw new Error(driveError_(up, token));
   const id = JSON.parse(up.getContentText()).id;
   try {
