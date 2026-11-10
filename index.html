@@ -400,7 +400,20 @@ const NOTIFY_NAME = '雪姊';   // 整備完成後要通知的人
 const CASH_OUT_CATS = ['規費', '拖車費', '洗車', '小百貨', '油資', '停車費', '郵資快遞', '文具雜支', '餐飲', '其他'];
 const CASH_IN_CATS  = ['公司撥補', '退回', '其他'];
 const CASH_LOW = 2000;        // 零用金餘額低於這個數字會變紅色提醒
-const ALLOC_MIN = 100000;     // 一般車：已收（訂金＋車款）要滿這個金額才能配車
+// 一般車：已收（訂金＋車款）要滿配車款才能配車
+// 車價 1,999,999 以下 → 5 萬；車價 200 萬以上 → 10 萬（車價沒填就看成交價，都沒填先以 10 萬計）
+const ALLOC_RULES = [{ below: 2000000, need: 50000 }];
+const ALLOC_DEFAULT = 100000;
+function allocMin(r) {
+  const price = Number(r['車價']) || Number(r['成交價']) || 0;
+  if (!price) return ALLOC_DEFAULT;
+  const rule = ALLOC_RULES.find(x => price < x.below);
+  return rule ? rule.need : ALLOC_DEFAULT;
+}
+function allocWhy(r) {
+  const price = Number(r['車價']) || Number(r['成交價']) || 0;
+  return price ? `${Number(r['車價']) ? '車價' : '成交價'} ${fmtMoney(price)}，配車款 ${fmtMoney(allocMin(r))}` : `還沒填成交價，先以 ${fmtMoney(ALLOC_DEFAULT)} 計`;
+}
 
 // 按「完成」時要填的資料。欄位名稱後面加 * 代表必填。
 // date：這個欄位的日期當作步驟完成日期　hint：表單上方的提醒
@@ -410,7 +423,7 @@ const STEP_FORMS = {
   '訂車':   { hint: `印出訂單交給${ASSIST_NAME}助理。`, fields: [`訂單已交助理|訂單已印出交給${ASSIST_NAME}*`] },
   '入訂金': { date: '訂金日期', hint: `訂金收據要附給${ASSIST_NAME}。刷卡的話要填刷卡日，並印出信用卡簽單。`,
               fields: ['訂金日期*', '訂金金額*', '訂金付款方式*', '訂金刷卡日|刷卡日*', '訂金簽單已印|信用卡簽單已印出*', `訂金收據已交助理|訂金收據已附給${ASSIST_NAME}*`, '成交價'] },
-  '配車':   { hint: '已收滿 10 萬，記得到系統上按「預估」。', fields: ['系統已按預估|系統上已按預估*'] },
+  '配車':   { hint: '配車款已收滿，記得到系統上按「預估」。', fields: ['系統已按預估|系統上已按預估*'] },
   '派工':   { hint: `車到整備中心後派工：配件、小百貨。小百貨要貼給${ASSIST_NAME}助理。`,
               fields: [`小百貨已交助理|小百貨已貼給${ASSIST_NAME}`, '配件'], remind: ['小百貨已交助理'] },
   '領車籍資料': { hint: '要填兩張紙本，並打 EIP 證件領取單。',
@@ -858,7 +871,7 @@ function viewSales() {
           <h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
           <div class="sub">${esc(carLine(r))}</div>
           ${stepBar(r, 'sales')}
-          <div class="next ${nx ? '' : 'ready'}">${nx ? '下一步：' + esc(nx) : '流程完成，可以歸檔'}${nx === '配車' && payInfo(r).paid < ALLOC_MIN ? `<span class="c-red">（還差 ${fmtMoney(ALLOC_MIN - payInfo(r).paid)} 才能配車）</span>` : ''}</div>
+          <div class="next ${nx ? '' : 'ready'}">${nx ? '下一步：' + esc(nx) : '流程完成，可以歸檔'}${nx === '配車' && payInfo(r).paid < allocMin(r) ? `<span class="c-red">（還差 ${fmtMoney(allocMin(r) - payInfo(r).paid)} 才能配車）</span>` : ''}</div>
           ${pendingReminders(r).length ? `<div class="tags">${remindTags(r)}</div>` : ''}
         </button>`;
       }).join('')}</div>`
@@ -1477,7 +1490,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v27</p>
+      <p class="app-ver">App 版本 v28</p>
     </section>`;
 }
 
@@ -1660,11 +1673,11 @@ function openStepSheet(step) {
   const { kind, id } = panelState;
   const r = findRec(kind, id); const f = flowOf(r); const done = !!f[step];
   if (step === '入車款' && kind !== 'taxi') { openPaySheet(); return; }
-  if (step === '配車' && kind === 'sales' && !done && payInfo(r).paid < ALLOC_MIN) {
+  if (step === '配車' && kind === 'sales' && !done && payInfo(r).paid < allocMin(r)) {
     const i = payInfo(r);
     openFormSheet({
       title: '還不能配車', specs: [],
-      hint: `配車前要先收滿 ${fmtMoney(ALLOC_MIN)}。目前已收 ${fmtMoney(i.paid) || '$0'}，還差 ${fmtMoney(ALLOC_MIN - i.paid)}。`,
+      hint: `配車前要先收滿 ${fmtMoney(allocMin(r))}（${allocWhy(r)}）。目前已收 ${fmtMoney(i.paid) || '$0'}，還差 ${fmtMoney(allocMin(r) - i.paid)}。`,
       top: `<section class="block calc"><h4>目前收款</h4>${payHtml(r, false)}</section>`,
       okText: '去記錄收款', onOk: () => openPaySheet(),
     });
@@ -1776,8 +1789,8 @@ function collectForm() {
     }
     f[s] = (sf && sf.date && r[sf.date]) || d;
   });
-  if (kind === 'sales' && f['配車'] && !flowOf(rec)['配車'] && payInfo(r).paid < ALLOC_MIN) {
-    toast(`已收 ${fmtMoney(payInfo(r).paid) || '$0'}，要收滿 ${fmtMoney(ALLOC_MIN)} 才能配車`); return null;
+  if (kind === 'sales' && f['配車'] && !flowOf(rec)['配車'] && payInfo(r).paid < allocMin(r)) {
+    toast(`已收 ${fmtMoney(payInfo(r).paid) || '$0'}，要收滿 ${fmtMoney(allocMin(r))} 才能配車（${allocWhy(r)}）`); return null;
   }
   const missing = markMissing(root, need, r);
   if (missing.length) { toast('已完成的步驟需要填：' + missing.join('、')); root.querySelector('.invalid')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return null; }
