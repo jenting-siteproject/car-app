@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v28';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v29';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -217,6 +217,10 @@ function ocr_(b64, mime) {
   }
   const token = ScriptApp.getOAuthToken();
   const auth = { Authorization: 'Bearer ' + token };
+  const scopes = tokenScopes_(token);
+  if (scopes && !/auth\/drive(\s|$)/.test(scopes)) {   // 只有唯讀，或完全沒有雲端硬碟權限
+    throw new Error('雲端硬碟權限不夠（' + (/drive\.readonly/.test(scopes) ? '只有唯讀' : '沒有') + '）：請把 Apps Script 的 Code.gs 換成最新版（最後一段有 DriveApp.createFile），執行 setup 按允許，再部署新版本');
+  }
   const boundary = 'carpwa' + Date.now();
   const meta = JSON.stringify({ name: '行照辨識暫存（會自動刪除）', mimeType: 'application/vnd.google-apps.document' });
   const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + meta +
@@ -236,13 +240,17 @@ function ocr_(b64, mime) {
   }
 }
 
+function tokenScopes_(token) {
+  try { return JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + token, { muteHttpExceptions: true }).getContentText()).scope || ''; }
+  catch (err) { return ''; }
+}
+
 /** 把雲端硬碟的錯誤翻成看得懂、知道下一步的話 */
 function driveError_(res, token) {
   let reason = '';
   try { const e = JSON.parse(res.getContentText()).error; reason = (e.errors && e.errors[0] && e.errors[0].reason) || e.status || e.message || ''; } catch (err) {}
-  let scopes = '';
-  try { scopes = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + token, { muteHttpExceptions: true }).getContentText()).scope || ''; } catch (err) {}
-  if (scopes && !/auth\/drive/.test(scopes)) {
+  const scopes = tokenScopes_(token);
+  if (scopes && !/auth\/drive(\s|$)/.test(scopes)) {
     return '還沒有讀照片的權限：Apps Script 裡的 Code.gs 還是舊的，或換了之後沒有執行 setup、沒有部署新版本';
   }
   if (/accessNotConfigured|SERVICE_DISABLED|has not been used|disabled/i.test(res.getContentText())) {
