@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v30';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v31';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -37,7 +37,8 @@ const FIELDS = [
   '車籍紙本已填', 'EIP領取單已打', '身分證已收', '印章已收', '和安已試算', '強制險已開',
   '額外配件已確認', '手冊已畫線', '溫馨提醒已寫', '名片已放',   // v7 新增（流程檢查項目）
   '總價', '車價', '配件成本', '補貼息', '趴數',   // v8 新增（趴數試算）
-  '訂單編號', '受訂日', '型號', '契約書號', '訂約人', '使用人', '原廠狀態', '合約配件金額'   // v9 新增（原廠受訂報告匯入）
+  '訂單編號', '受訂日', '型號', '契約書號', '訂約人', '使用人', '原廠狀態', '合約配件金額',   // v9 新增（原廠受訂報告匯入）
+  '原訂單客戶'   // v10 新增（行照車主和訂單客戶不同時，保留原本的名字）
 ];
 // 零用金分頁有自己的欄位
 const CASH_FIELDS = ['id', '日期', '類型', '分類', '項目', '金額', '備註', '建立時間', '更新時間'];
@@ -154,8 +155,16 @@ function findRow_(sh, id) {
   return 0;
 }
 
+/** 欄位有新增時，自動把試算表第一列的標題補上（不用再執行 setup） */
+function ensureHeader_(sh, F) {
+  const cur = sh.getRange(1, 1, 1, F.length).getDisplayValues()[0];
+  if (cur.join('|') === F.join('|')) return;
+  sh.getRange(1, 1, 1, F.length).setValues([F]).setFontWeight('bold').setBackground('#16202b').setFontColor('#ffffff');
+}
+
 function save_(key, rec) {
   const sh = sheet_(key);
+  ensureHeader_(sh, fieldsOf_(key));
   const now = stamp_();
   rec = Object.assign({}, rec);
   if (!rec.id) { rec.id = Utilities.getUuid().slice(0, 8); rec['建立時間'] = now; }
@@ -182,6 +191,7 @@ function bulk_(items) {
   let added = 0, skipped = 0;
   Object.keys(groups).forEach(key => {
     const sh = sheet_(key); const F = fieldsOf_(key);
+    ensureHeader_(sh, F);
     const rows = [];
     groups[key].forEach(rec => {
       if (rec['訂單編號'] && seen[rec['訂單編號']]) { skipped++; return; }

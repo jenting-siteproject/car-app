@@ -472,6 +472,7 @@ const FIELD_META = {
   小百貨已安裝: { type: 'check' }, 交車已上傳: { type: 'check' }, 不聯繫已註記: { type: 'check' },
   洗車工單號碼: { upper: true }, 通知內容: { type: 'textarea' },
   金額: { type: 'money', ph: '例如 1500' }, 日期: { type: 'date' },
+  行照車主: { ph: '行照上的車主名字' }, 原訂單客戶: { ph: '訂單上原本的名字' },
   系統名稱: { ph: '例如 原廠 EIP' }, 網址: { type: 'url', raw: true, ph: '可不填' },
   帳號: { raw: true }, 密碼: { raw: true },
   項目: { ph: '例如 ABC-1234 領牌規費' }, 備註: { ph: '可不填' },
@@ -511,7 +512,7 @@ const FORM = {
     ['特殊備註', ['特殊備註']],
   ],
   taxi: [
-    ['基本資料', ['客戶姓名', '電話', '月份']],
+    ['基本資料', ['客戶姓名', '原訂單客戶', '電話', '月份']],
     ['配車', ['廠牌', '車型', '顏色', '等級', '價位', '車身號碼|車身(引擎)號碼']],
     ['拖車', ['拖車安排日', '拖車抵達日']],
     ['領牌', ['領牌日', '車牌']],
@@ -894,7 +895,7 @@ function viewTaxi() {
         const x = calcTaxi({ ...r }); const bal = x['車款餘額'] === '' || x['車款餘額'] == null ? null : Number(x['車款餘額']);
         return `<button class="item" data-open="taxi:${esc(r.id)}">
           <div class="item-top">${plateHtml(r)}<span class="tag ${closed ? 'green' : 'gray'}">${closed ? '已結案' : fmtMonth(r['月份'])}</span></div>
-          <h3>${esc(r['客戶姓名'] || '未填車行')}</h3>
+          <h3>${esc(r['客戶姓名'] || '未填車行')}</h3>${r['原訂單客戶'] ? `<div class="sub">原訂單：${esc(r['原訂單客戶'])}</div>` : ''}
           ${taxiSpec(r)}
           ${bal !== null ? `<div class="next" style="${bal > 0 ? 'color:var(--red)' : 'color:var(--green)'}">${Number(r['折扣']) ? `折扣 ${esc(r['折扣'])}%　` : ''}${bal > 0 ? '餘額 ' + fmtMoney(bal) : '車款已付清'}</div>` : ''}
           ${closed ? '' : stepBar(r, 'taxi') + `<div class="next ${nx ? '' : 'ready'}">${nx ? '下一步：' + esc(nx) : '流程完成，可以結案'}</div>`}
@@ -1123,7 +1124,7 @@ function matchLicense(info) {
   if (byPlate.length) return { by: '車牌', list: byPlate };
   const o = info.owner.replace(/[（）()]/g, '');
   if (o.length >= 2) {
-    const byName = all.filter(x => { const n = String(x.r['客戶姓名'] || '').replace(/[（）()]/g, ''); return n.length >= 2 && (n === o || n.includes(o) || o.includes(n)); })
+    const byName = all.filter(x => { return [x.r['客戶姓名'], x.r['原訂單客戶']].some(v => { const n = String(v || '').replace(/[（）()]/g, ''); return n.length >= 2 && (n === o || n.includes(o) || o.includes(n)); }); })
       .sort((a, b) => (!!a.r['車牌'] - !!b.r['車牌']) || String(b.r['受訂日'] || b.r['建立時間'] || '').localeCompare(String(a.r['受訂日'] || a.r['建立時間'] || '')));
     if (byName.length) return { by: '車主姓名', list: byName.slice(0, 8) };
   }
@@ -1144,13 +1145,15 @@ async function startLicense(file) {
   licSel = m.list.length === 1 ? m.list[0] : null;
   const pick = m.list.length
     ? `<h4>${m.list.length === 1 ? `找到這台（比對：${m.by}）` : `用${m.by}找到 ${m.list.length} 台，請點選是哪一台`}</h4>
-       ${licTarget && info.owner && m.list[0] && !String(m.list[0].r['客戶姓名'] || '').includes(info.owner) && !info.owner.includes(String(m.list[0].r['客戶姓名'] || '—')) ? `<p class="c-red" style="margin:0 0 8px">注意：行照上的車主是「${esc(info.owner)}」，和這台的客戶不一樣，請確認沒拍錯。</p>` : ''}
+       ${licTarget && info.owner && m.list[0] && !String(m.list[0].r['客戶姓名'] || '').includes(info.owner) && !info.owner.includes(String(m.list[0].r['客戶姓名'] || '—')) ? (m.list[0].kind === 'taxi'
+            ? `<p class="c-amber" style="margin:0 0 8px">行照車主是「${esc(info.owner)}」，和訂單客戶不同。填入後客戶會改成行照上的名字，原本的名字會留著。</p>`
+            : `<p class="c-red" style="margin:0 0 8px">注意：行照上的車主是「${esc(info.owner)}」，和這台的客戶不一樣，請確認沒拍錯。</p>`) : ''}
        <div class="lic-pick">${m.list.map(x => `<button type="button" class="lic-car" data-licpick="${x.kind}:${esc(x.r.id)}" aria-pressed="${licSel === x}">${licLabel(x)}</button>`).join('')}</div>`
     : `<h4 class="c-red">找不到對應的車</h4><p class="muted" style="margin:0">引擎號碼、車牌、車主姓名都對不上。請到那台車的詳細頁，按「拍行照填車牌」再拍一次。</p>`;
   openFormSheet({
-    title: '行照辨識', hint: '請核對辨識結果，有錯可以直接改。',
-    specs: ['車牌*', '領牌日', '引擎號碼', '車身號碼'],
-    values: { 車牌: info.plate, 領牌日: info.date, 引擎號碼: info.engine, 車身號碼: info.vin },
+    title: '行照辨識', hint: '請核對辨識結果，有錯可以直接改。計程車會把客戶姓名改成行照上的車主，原本的名字留在「原訂單客戶」。',
+    specs: ['車牌*', '領牌日', '引擎號碼', '車身號碼', '行照車主|行照上的車主（計程車會改成這個名字）'],
+    values: { 車牌: info.plate, 領牌日: info.date, 引擎號碼: info.engine, 車身號碼: info.vin, 行照車主: info.owner },
     top: `<section class="block calc">${pick}
       <details class="ocr-raw"><summary>看辨識到的文字${info.owner ? `（車主：${esc(info.owner)}）` : ''}</summary><pre>${esc(text)}</pre></details></section>`,
     okText: '填入車牌',
@@ -1158,9 +1161,16 @@ async function startLicense(file) {
     onOk: async v => {
       const { kind, r } = licSel; const n = JSON.parse(JSON.stringify(findRec(kind, r.id)));
       n['車牌'] = v['車牌'];
+      let renamed = '';
+      const owner = (v['行照車主'] || '').trim();
+      if (kind === 'taxi' && owner && owner !== n['客戶姓名']) {   // 計程車：改成行照上的車主，保留原訂單的名字
+        if (!n['原訂單客戶']) n['原訂單客戶'] = n['客戶姓名'] || '';
+        renamed = `，客戶改為「${owner}」（原訂單：${n['原訂單客戶'] || '未填'}）`;
+        n['客戶姓名'] = owner;
+      }
       ['領牌日', '引擎號碼', '車身號碼'].forEach(k => { if (v[k] && !n[k]) n[k] = v[k]; });
       const stay = !!licTarget;
-      await saveRecord(kind, n, { stay, msg: `已填入車牌 ${v['車牌']}：${n['客戶姓名'] || ''}` });
+      await saveRecord(kind, n, { stay, msg: `已填入車牌 ${v['車牌']}${renamed || '：' + (n['客戶姓名'] || '')}` });
     },
   });
 }
@@ -1426,7 +1436,7 @@ function renewAction(act) {
 
 function norm(s) { return String(s ?? '').toLowerCase().replace(/[\s\-_.·]/g, ''); }
 function matches(r, q) {
-  const hay = norm(['訂單編號', '契約書號', '訂約人', '使用人', '型號', '車牌', '客戶姓名', '電話', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼', '配件', '保險公司', '特殊備註', '月份', '領牌日', '交車日'].map(f => r[f]).join('|'));
+  const hay = norm(['訂單編號', '契約書號', '訂約人', '使用人', '原訂單客戶', '型號', '車牌', '客戶姓名', '電話', '廠牌', '車型', '年式', '顏色', '車身號碼', '引擎號碼', '配件', '保險公司', '特殊備註', '月份', '領牌日', '交車日'].map(f => r[f]).join('|'));
   return norm(q).split('').length === 0 || q.trim().split(/\s+/).every(w => hay.includes(norm(w)));
 }
 
@@ -1490,7 +1500,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v28</p>
+      <p class="app-ver">App 版本 v29</p>
     </section>`;
 }
 
@@ -1600,7 +1610,7 @@ function openDetail(kind, id) {
             <span class="when">${f[s] ? esc(f[s]) : (s === nx ? '<span class="go">完成</span>' : '')}</span>
           </button>
         </li>`).join('')}</ol></section>` : ''}
-      <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
+      <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('原訂單客戶', esc(r['原訂單客戶']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
       <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl><button class="btn" style="margin-top:12px" data-lic="${kind}:${esc(r.id)}">${r['車牌'] ? '拍行照重新填' : '拍行照填車牌'}</button></section>
       ${r['訂單編號'] ? `<section class="block"><h4>原廠訂單</h4><dl>${row('訂單編號', esc(r['訂單編號']), 'vin')}${row('受訂日', esc(fmtD(r['受訂日'])))}${row('型號', esc(r['型號']))}${row('契約書號', esc(r['契約書號']), 'vin')}${row('訂約人', esc(r['訂約人']))}${row('使用人', esc(r['使用人']))}${row('合約配件', esc(fmtMoney(r['合約配件金額'])))}${row('原廠狀態', esc(r['原廠狀態']))}</dl></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
