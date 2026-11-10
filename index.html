@@ -212,6 +212,14 @@ a.tel{color:var(--brand);font-weight:700;text-decoration:underline}
 .multi{display:flex;flex-wrap:wrap;gap:8px}
 .pct{display:flex;align-items:center;gap:8px}
 .pct-btn{width:100%;margin-bottom:14px;border-color:var(--brand);color:var(--brand)}
+.top-tools{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.top-tools.one{grid-template-columns:1fr}
+.lic-pick{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.lic-car{text-align:left;border:2px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;font-weight:700;font-size:17px}
+.lic-car small{display:block;font-weight:400;font-size:13px;color:var(--mute)}
+.lic-car[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft);box-shadow:inset 0 0 0 1px var(--brand)}
+.ocr-raw summary{color:var(--mute);font-size:14px;cursor:pointer}
+.ocr-raw pre{white-space:pre-wrap;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:200px;overflow:auto}
 .pct-result{text-align:center;padding:6px 0 14px;margin-bottom:6px;border-bottom:2px solid var(--line)}
 .pct-result span{display:block;font-weight:700;color:var(--mute)}
 .pct-result b{display:block;font:700 54px/1.1 var(--plate-font);color:var(--brand)}
@@ -373,6 +381,7 @@ nav{position:relative;flex:none;left:auto;right:auto;bottom:auto}
 </nav>
 
 <div class="panel" id="panel" role="dialog" aria-modal="true"></div>
+<input type="file" id="licFile" accept="image/*" hidden>
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -838,7 +847,7 @@ function viewSales() {
   const waitingPlate = rows.filter(r => !plateDone(r, 'sales')).length;
   const ready = rows.filter(r => !nextStep(r, 'sales')).length;
 
-  return `<button class="btn pct-btn" data-pct="new">趴數試算</button>`
+  return `<div class="top-tools"><button class="btn pct-btn" data-pct="new">趴數試算</button><button class="btn pct-btn" data-lic="any">拍行照填車牌</button></div>`
     + monthEndAlert('sales')
     + `<div class="chips">${['全部', ...months].map(m => `<button class="chip" data-month="${esc(m)}" aria-pressed="${ui.salesMonth === m}">${m === '全部' ? '全部' : fmtMonth(m)}</button>`).join('')}</div>`
     + `<p class="summary"><span><strong>${rows.length}</strong>台進行中</span><span><strong>${waitingPlate}</strong>待領牌</span><span><strong>${ready}</strong>可歸檔</span>${(() => { const o = rows.map(r => payInfo(r).left).filter(v => v > 0); const t = o.reduce((a, b) => a + b, 0); return t ? `<span class="owe">未收車款 <strong>${fmtMoney(t)}</strong>（${o.length} 台）</span>` : ''; })()}</p>`
@@ -863,7 +872,8 @@ function viewTaxi() {
     .sort((a, b) => (b['月份'] || '').localeCompare(a['月份'] || ''));
   const owe = rows.map(r => Number(calcTaxi({ ...r })['車款餘額']) || 0).filter(v => v > 0);
   const total = owe.reduce((a, b) => a + b, 0);
-  return monthEndAlert('taxi')
+  return `<div class="top-tools one"><button class="btn pct-btn" data-lic="any">拍行照填車牌</button></div>`
+    + monthEndAlert('taxi')
     + `<div class="chips">${['進行中', '已結案', '全部'].map(f => `<button class="chip" data-taxi="${f}" aria-pressed="${ui.taxiFilter === f}">${f}</button>`).join('')}</div>`
     + (rows.length ? `<p class="summary"><span><strong>${rows.length}</strong>台</span><span class="owe ${total ? '' : 'clear'}">未收餘額 <strong>${total ? fmtMoney(total) : '$0'}</strong>${owe.length ? `（${owe.length} 台）` : ''}</span></p>` : '')
     + (rows.length ? `<div class="list">${rows.map(r => {
@@ -1046,6 +1056,102 @@ async function startImport(files) {
   });
 }
 const IMPORT_CHUNK = 200;   // 一次送幾筆
+
+/* ---------- 行照辨識：拍照 → 找到是哪一台 → 填車牌 ---------- */
+let licTarget = null, licSel = null;
+const NORM = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function photoToBase64(file, max = 2000) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', 0.88).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('這張照片打不開，請換一張')); };
+    img.src = url;
+  });
+}
+function parseLicense(raw) {
+  const t = String(raw || '').replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[－—–]/g, '-').replace(/[：]/g, ':');
+  const up = t.toUpperCase(); const lines = up.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const after = re => {   // 標籤同一行後面的字，沒有的話就看下一行
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(re); if (!m) continue;
+      const rest = lines[i].slice(m.index + m[0].length).replace(/^[\s:]+/, '');
+      return rest || lines[i + 1] || '';
+    }
+    return '';
+  };
+  const plateRe = /(?:^|[^A-Z0-9])([A-Z0-9]{2,4})\s*-\s*([A-Z0-9]{2,4})(?![A-Z0-9])/g;
+  const isPlate = (a, b) => /[A-Z]/.test(a + b) && /\d/.test(a + b) && !(/^\d+$/.test(a) && /^\d+$/.test(b));
+  const findPlate = str => { let m; plateRe.lastIndex = 0; while ((m = plateRe.exec(str))) if (isPlate(m[1], m[2])) return m[1] + '-' + m[2]; return ''; };
+  const tok = str => (str.match(/[A-Z0-9][A-Z0-9-]{4,}[A-Z0-9]/g) || [])[0] || '';
+  const plate = findPlate(after(/牌照號碼|車牌號碼|號牌|車號/)) || findPlate(up);
+  const engine = tok(after(/引擎號碼|引擎號/));
+  let vin = tok(after(/車身號碼|車身號|車架號碼/));
+  if (NORM(vin).length < 10) vin = (up.match(/\b[A-HJ-NPR-Z0-9]{17}\b/) || [])[0] || vin;
+  const owner = (after(/車主(?:姓名|名稱)?/).match(/[一-鿿]{2,}(?:[一-鿿（）()]*)/) || [])[0] || '';
+  const dm = after(/發照日期|發照/).match(/(\d{2,4})\s*[年/.-]\s*(\d{1,2})\s*[月/.-]\s*(\d{1,2})/);
+  const date = dm ? `${+dm[1] < 1000 ? +dm[1] + 1911 : dm[1]}-${pad(dm[2])}-${pad(dm[3])}` : '';
+  const tokens = (up.match(/[A-Z0-9-]{5,}/g) || []).map(NORM).filter(x => x.length >= 6 && /\d/.test(x));
+  return { plate, engine, vin, owner, date, tokens };
+}
+function matchLicense(info) {
+  const all = ['sales', 'taxi', 'db'].flatMap(k => data[k].map(r => ({ kind: k, r })));
+  const toks = new Set([...info.tokens, NORM(info.engine), NORM(info.vin)].filter(x => x.length >= 6));
+  const hit = v => { const n = NORM(v); return n.length >= 6 && [...toks].some(t => t === n || (t.length >= 8 && n.length >= 8 && (t.includes(n) || n.includes(t)))); };
+  const byNo = all.filter(x => hit(x.r['引擎號碼']) || hit(x.r['車身號碼']));
+  if (byNo.length) return { by: '引擎／車身號碼', list: byNo };
+  const plate = NORM(info.plate);
+  const byPlate = plate ? all.filter(x => NORM(x.r['車牌']) === plate) : [];
+  if (byPlate.length) return { by: '車牌', list: byPlate };
+  const o = info.owner.replace(/[（）()]/g, '');
+  if (o.length >= 2) {
+    const byName = all.filter(x => { const n = String(x.r['客戶姓名'] || '').replace(/[（）()]/g, ''); return n.length >= 2 && (n === o || n.includes(o) || o.includes(n)); })
+      .sort((a, b) => (!!a.r['車牌'] - !!b.r['車牌']) || String(b.r['受訂日'] || b.r['建立時間'] || '').localeCompare(String(a.r['受訂日'] || a.r['建立時間'] || '')));
+    if (byName.length) return { by: '車主姓名', list: byName.slice(0, 8) };
+  }
+  return { by: '', list: [] };
+}
+const licLabel = x => `${esc(x.r['客戶姓名'] || '未填客戶')}<small>${esc([x.r['車型'], fmtMonth(x.r['月份'])].filter(Boolean).join('　'))}　${{ sales: '本月銷售', taxi: '計程車', db: '資料庫' }[x.kind]}${x.r['車牌'] ? '　已有車牌 ' + esc(x.r['車牌']) : ''}</small>`;
+async function startLicense(file) {
+  let text, info;
+  try {
+    toast('照片辨識中，大約 10 秒…');
+    const image = await photoToBase64(file);
+    text = cfg.url ? (await api('ocr', { image, mime: 'image/jpeg' })).text : DEMO_LICENSE_TEXT;
+    info = parseLicense(text);
+  } catch (e) { toast('辨識失敗：' + e.message); return; }
+  let m;
+  if (licTarget) { const r = findRec(licTarget.kind, licTarget.id); m = { by: '你選的車', list: r ? [{ kind: licTarget.kind, r }] : [] }; }
+  else m = matchLicense(info);
+  licSel = m.list.length === 1 ? m.list[0] : null;
+  const pick = m.list.length
+    ? `<h4>${m.list.length === 1 ? `找到這台（比對：${m.by}）` : `用${m.by}找到 ${m.list.length} 台，請點選是哪一台`}</h4>
+       ${licTarget && info.owner && m.list[0] && !String(m.list[0].r['客戶姓名'] || '').includes(info.owner) && !info.owner.includes(String(m.list[0].r['客戶姓名'] || '—')) ? `<p class="c-red" style="margin:0 0 8px">注意：行照上的車主是「${esc(info.owner)}」，和這台的客戶不一樣，請確認沒拍錯。</p>` : ''}
+       <div class="lic-pick">${m.list.map(x => `<button type="button" class="lic-car" data-licpick="${x.kind}:${esc(x.r.id)}" aria-pressed="${licSel === x}">${licLabel(x)}</button>`).join('')}</div>`
+    : `<h4 class="c-red">找不到對應的車</h4><p class="muted" style="margin:0">引擎號碼、車牌、車主姓名都對不上。請到那台車的詳細頁，按「拍行照填車牌」再拍一次。</p>`;
+  openFormSheet({
+    title: '行照辨識', hint: '請核對辨識結果，有錯可以直接改。',
+    specs: ['車牌*', '領牌日', '引擎號碼', '車身號碼'],
+    values: { 車牌: info.plate, 領牌日: info.date, 引擎號碼: info.engine, 車身號碼: info.vin },
+    top: `<section class="block calc">${pick}
+      <details class="ocr-raw"><summary>看辨識到的文字${info.owner ? `（車主：${esc(info.owner)}）` : ''}</summary><pre>${esc(text)}</pre></details></section>`,
+    okText: '填入車牌',
+    validate: () => licSel ? '' : (m.list.length ? '請先點選是哪一台車' : '找不到對應的車，請到那台車的詳細頁再拍一次'),
+    onOk: async v => {
+      const { kind, r } = licSel; const n = JSON.parse(JSON.stringify(findRec(kind, r.id)));
+      n['車牌'] = v['車牌'];
+      ['領牌日', '引擎號碼', '車身號碼'].forEach(k => { if (v[k] && !n[k]) n[k] = v[k]; });
+      const stay = !!licTarget;
+      await saveRecord(kind, n, { stay, msg: `已填入車牌 ${v['車牌']}：${n['客戶姓名'] || ''}` });
+    },
+  });
+}
+const DEMO_LICENSE_TEXT = '汽車行車執照\n車號 RAB-8899\n車主 黃小姐\n廠牌 TOYOTA\n型式 NSP170G\n引擎號碼 2NR1234567\n車身號碼 RKLBB3HE5P1234567\n發照日期 115年11月05日';
 
 /* ---------- 一般車 ⇄ 計程車 ---------- */
 function toTaxiRecord(r, from) {
@@ -1371,7 +1477,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v26</p>
+      <p class="app-ver">App 版本 v27</p>
     </section>`;
 }
 
@@ -1482,7 +1588,7 @@ function openDetail(kind, id) {
           </button>
         </li>`).join('')}</ol></section>` : ''}
       <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
-      <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl></section>
+      <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl><button class="btn" style="margin-top:12px" data-lic="${kind}:${esc(r.id)}">${r['車牌'] ? '拍行照重新填' : '拍行照填車牌'}</button></section>
       ${r['訂單編號'] ? `<section class="block"><h4>原廠訂單</h4><dl>${row('訂單編號', esc(r['訂單編號']), 'vin')}${row('受訂日', esc(fmtD(r['受訂日'])))}${row('型號', esc(r['型號']))}${row('契約書號', esc(r['契約書號']), 'vin')}${row('訂約人', esc(r['訂約人']))}${row('使用人', esc(r['使用人']))}${row('合約配件', esc(fmtMoney(r['合約配件金額'])))}${row('原廠狀態', esc(r['原廠狀態']))}</dl></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>要報趴數</h4>${pctCalc(r) && pctCalc(r).carPart > 0 ? `<div class="pct-line"><b>${esc(repFmt(pctCalc(r).rep))}</b><span>${esc(repNote(pctCalc(r).rep))}<br>總價 ${fmtMoney(r['總價'])}　車價 ${fmtMoney(r['車價'])}<br>配件成本 ${fmtMoney(r['配件成本']) || '$0'}　補貼息 ${fmtMoney(r['補貼息']) || '$0'}</span></div>` : '<p class="muted" style="margin:0 0 10px">還沒試算</p>'}<button class="btn" data-pct="${kind}:${esc(r.id)}">${pctCalc(r) ? '重新試算' : '試算這台的趴數'}</button></section>` : ''}
@@ -1543,6 +1649,7 @@ async function submitSheet() {
   const root = $('#sheet');
   const vals = readFields(root);
   const missing = markMissing(root, ctx.specs, vals);
+  if (ctx.validate) { const err = ctx.validate(vals); if (err) { toast(err); return; } }
   if (missing.length) { toast('請填寫：' + missing.join('、')); return; }
   if (ctx.calc) calcTaxi(vals);
   closeStepSheet();
@@ -1704,6 +1811,14 @@ document.addEventListener('click', async e => {
   if (t.dataset.dbf) { ui.dbFilter = t.dataset.dbf; render(); return; }
   if (t.dataset.open) { const [k, id] = t.dataset.open.split(':'); openDetail(k, id); return; }
   if (t.dataset.cmonth) { ui.cashMonth = t.dataset.cmonth; render(); return; }
+  if (t.dataset.lic) {
+    licTarget = t.dataset.lic === 'any' ? null : { kind: t.dataset.lic.split(':')[0], id: t.dataset.lic.split(':')[1] };
+    $('#licFile').value = ''; $('#licFile').click(); return;
+  }
+  if (t.dataset.licpick) {
+    const [k, id] = t.dataset.licpick.split(':'); const r = findRec(k, id); licSel = r ? { kind: k, r } : null;
+    document.querySelectorAll('.lic-car').forEach(b => b.setAttribute('aria-pressed', b === t)); return;
+  }
   if (t.dataset.pct) { if (t.dataset.pct === 'new') openPctSheet(); else { const [k, id] = t.dataset.pct.split(':'); openPctSheet(k, id); } return; }
   if (t.id === 'importBtn') { $('#importFile').value = ''; $('#importFile').click(); return; }
   if (t.hasAttribute('data-pwnew')) { openPwSheet(); return; }
@@ -1792,7 +1907,8 @@ document.addEventListener('click', async e => {
 });
 
 document.addEventListener('keydown', e => { const c = e.target.closest?.('div[data-open]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
-document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files.length) startImport([...e.target.files]); });
+document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files.length) startImport([...e.target.files]);
+  if (e.target.id === 'licFile' && e.target.files[0]) startLicense(e.target.files[0]); });
 document.getElementById('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeStepSheet(); });
 document.addEventListener('input', e => {
   e.target.closest('.field')?.classList.remove('invalid');
