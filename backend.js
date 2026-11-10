@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v24';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v25';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -95,6 +95,7 @@ function doPost(e) {
       case 'save':    return out_({ ok: true, record: save_(p.sheet, p.record) });
       case 'bulk':    return out_(Object.assign({ ok: true }, bulk_(p.items || [])));
       case 'delete':  remove_(p.sheet, p.id); return out_({ ok: true });
+      case 'move':    return out_({ ok: true, record: move_(p.from, p.to, p.record) });
       case 'archive': return out_({ ok: true, record: archive_(p.id) });
       default:        return out_({ ok: false, error: '未知的動作：' + p.action });
     }
@@ -193,6 +194,14 @@ function bulk_(items) {
     }
   });
   return { added: added, skipped: skipped };
+}
+
+/** 把一筆資料從一個分頁搬到另一個（例如一般車轉計程車）：先存新的，再刪舊的 */
+function move_(from, to, rec) {
+  if (!SHEET[from] || !SHEET[to] || from === to) throw new Error('搬移的分頁不對');
+  const saved = save_(to, rec);
+  remove_(from, rec.id);
+  return saved;
 }
 
 function remove_(key, id) {

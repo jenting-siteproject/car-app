@@ -229,6 +229,7 @@ a.tel{color:var(--brand);font-weight:700;text-decoration:underline}
 .pw-line span{flex:none;width:2.6em;color:var(--mute);font-size:14px}
 .pw-line b{flex:1;min-width:0;font-size:17px;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
 .pw-line b.dots{letter-spacing:.1em;color:var(--mute)}
+.btn.convert{flex-basis:100%;border-style:dashed;color:var(--mute)}
 .btn.mini2{min-height:40px;padding:6px 12px;font-size:15px;flex:none;text-decoration:none;display:inline-flex;align-items:center}
 .pays.imp li span small{display:block;font-size:13px;color:var(--mute);font-weight:400}
 .cash-hero{border-left:8px solid var(--green)}
@@ -719,6 +720,11 @@ function demoApi(action, p) {
       d[sheet].push({ ...record, id: Math.random().toString(36).slice(2, 10), 建立時間: stamp(), 更新時間: stamp() }); out.added++;
     });
   }
+  if (action === 'move') {
+    d[p.from] = d[p.from].filter(x => x.id !== p.record.id);
+    const r = { ...p.record, 更新時間: stamp() }; const i = d[p.to].findIndex(x => x.id === r.id);
+    i >= 0 ? (d[p.to][i] = r) : d[p.to].push(r); out.record = r;
+  }
   if (action === 'archive') {
     const r = d.sales.find(x => x.id === p.id);
     Object.assign(r, { 狀態: '已歸檔', 歸檔時間: stamp() });
@@ -923,6 +929,8 @@ async function copyText(text, what) {
 const XLSX_URLS = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
                    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];   // 第一個失敗就用第二個
 const TAXI_NAME = /交通|計程車|的士/;          // 領照人名稱有這些字 → 歸到計程車
+const TAXI_PEOPLE = ['何成秀'];               // 領照人、訂約人或使用人是這些人 → 歸到計程車
+const isTaxiBy = (owner, ...people) => TAXI_NAME.test(owner || '') || TAXI_PEOPLE.some(n => [owner, ...people].some(v => String(v || '').includes(n)));
 const SKIP_STATUS = ['暫退', '退訂'];          // 這些狀態不匯入
 function loadXlsx() {
   if (window.XLSX) return Promise.resolve();
@@ -953,15 +961,22 @@ async function readOrderReport(file) {
   return rows.slice(hi + 1).map(r => Object.fromEntries(H.map((h, i) => [h, String(r[i] ?? '').trim()]))).filter(o => o['訂單編號']);
 }
 function planImport(list) {
-  const have = new Set([...data.db, ...data.sales, ...data.taxi].map(x => x['訂單編號']).filter(Boolean));
-  const plan = { items: [], salesNew: 0, taxiNew: 0, dbDone: 0, taxiDone: 0, skipped: [], dup: 0 };
+  const where = new Map();
+  ['db', 'sales', 'taxi'].forEach(k => data[k].forEach(x => { if (x['訂單編號']) where.set(x['訂單編號'], { kind: k, rec: x }); }));
+  const plan = { items: [], salesNew: 0, taxiNew: 0, dbDone: 0, taxiDone: 0, skipped: [], dup: 0, moves: [] };
+  const have = new Set(where.keys());
   list.forEach(o => {
     const st = o['訂單狀態'];
     if (SKIP_STATUS.includes(st)) { plan.skipped.push(o); return; }
-    if (have.has(o['訂單編號'])) { plan.dup++; return; }
+    if (have.has(o['訂單編號'])) {
+      const w = where.get(o['訂單編號']);
+      if (w && w.kind !== 'taxi' && isTaxiBy(o['領照人'], o['訂約人姓名'], o['使用人姓名'])) plan.moves.push(w);
+      else plan.dup++;
+      return;
+    }
     have.add(o['訂單編號']);
     const date = dateOf(o['受訂日']), price = numOf(o['成交價']), dep = numOf(o['定金']), acc = numOf(o['合約配件$']);
-    const isTaxi = TAXI_NAME.test(o['領照人']), done = st === '交車';
+    const isTaxi = isTaxiBy(o['領照人'], o['訂約人姓名'], o['使用人姓名']), done = st === '交車';
     const r = {
       訂單編號: o['訂單編號'], 受訂日: date, 月份: date.slice(0, 7), 客戶姓名: o['領照人'], 電話: o['電話'],
       廠牌: 'Toyota', 車型: o['車名'], 型號: [o['車型'], o['SFX']].filter(Boolean).join(' '), 契約書號: o['契約書流水號'],
@@ -983,34 +998,93 @@ function planImport(list) {
   });
   return plan;
 }
-async function startImport(file) {
-  let list;
-  try { toast('讀取檔案中…'); list = await readOrderReport(file); }
-  catch (e) { toast(e.message); return; }
+async function startImport(files) {
+  let list = [];
+  try {
+    toast('讀取檔案中…');
+    for (const f of files) list = list.concat(await readOrderReport(f));
+  } catch (e) { toast(e.message); return; }
+  const byNo = new Map(); list.forEach(o => byNo.set(o['訂單編號'], o));   // 同一張訂單出現在多個檔案，用後面的
+  list = [...byNo.values()];
   const p = planImport(list);
   const line = (label, n, note = '') => `<li><span>${label}${note ? `<small>${note}</small>` : ''}</span><b>${n} 筆</b></li>`;
+  const total = p.items.length + p.moves.length;
   openFormSheet({
     title: '匯入受訂報告', specs: [],
-    top: `<section class="block calc"><h4>${esc(file.name)}：共 ${list.length} 張訂單</h4><ul class="pays imp">
+    top: `<section class="block calc"><h4>${files.length > 1 ? `${files.length} 個檔案` : esc(files[0].name)}：共 ${list.length} 張訂單</h4><ul class="pays imp">
       ${line('本月銷售（進行中）', p.salesNew)}
       ${line('計程車（進行中）', p.taxiNew)}
       ${line('車輛資料庫', p.dbDone, '已交車的一般車')}
       ${line('計程車（已結案）', p.taxiDone, '已交車的計程車')}
+      ${p.moves.length ? line('改成計程車', p.moves.length, '之前匯入成一般車，現在轉過去') : ''}
       ${line('不匯入', p.skipped.length, SKIP_STATUS.join('、') + '的訂單')}
       ${line('已經匯入過', p.dup, '同一張訂單編號，略過')}
       </ul>
-      <p class="muted" style="margin:10px 0 0">領照人名稱有「交通」「計程車」「的士」的歸到計程車。身分證字號、虛擬帳號不會匯入。</p></section>`,
-    okText: p.items.length ? `匯入 ${p.items.length} 筆` : '沒有新資料，關閉',
+      <p class="muted" style="margin:10px 0 0">領照人名稱有「交通」「計程車」「的士」，或領照人、訂約人、使用人是${TAXI_PEOPLE.join('、')}的，歸到計程車。身分證字號、虛擬帳號不會匯入。</p></section>`,
+    okText: total ? `匯入 ${total} 筆` : '沒有新資料，關閉',
     onOk: async () => {
-      if (!p.items.length) return;
+      if (!total) return;
+      let added = 0, skipped = 0, moved = 0;
       try {
-        toast(`匯入中，請稍候…（${p.items.length} 筆）`);
-        const j = await api('bulk', { items: p.items });
+        for (let i = 0; i < p.items.length; i += IMPORT_CHUNK) {
+          toast(`匯入中，請不要關閉 App…（${Math.min(i + IMPORT_CHUNK, p.items.length)} / ${p.items.length}）`);
+          const j = await api('bulk', { items: p.items.slice(i, i + IMPORT_CHUNK) });
+          added += j.added || 0; skipped += j.skipped || 0;
+        }
+        for (const w of p.moves) {
+          toast(`改成計程車…（${moved + 1} / ${p.moves.length}）`);
+          await moveRecord(w.kind, 'taxi', toTaxiRecord(w.rec, w.kind)); moved++;
+        }
         await sync(true);
-        toast(`匯入完成：新增 ${j.added} 筆${j.skipped ? `，略過 ${j.skipped} 筆重複` : ''}`);
-      } catch (e) { toast('匯入失敗：' + e.message); }
+        toast(`匯入完成：新增 ${added} 筆${moved ? `，改成計程車 ${moved} 筆` : ''}${skipped ? `，略過 ${skipped} 筆重複` : ''}`);
+      } catch (e) {
+        await sync(true);
+        toast(`匯入到一半失敗：${e.message}（已完成 ${added} 筆，再匯入一次會接著做）`);
+      }
     },
   });
+}
+const IMPORT_CHUNK = 200;   // 一次送幾筆
+
+/* ---------- 一般車 ⇄ 計程車 ---------- */
+function toTaxiRecord(r, from) {
+  const n = JSON.parse(JSON.stringify(r)); const f = flowOf(n);
+  if (f['領牌'] && !f['登記領牌資料']) f['登記領牌資料'] = f['領牌'];
+  const paid = payInfo(n).paid;
+  Object.assign(n, { 類型: '計程車', 流程: f, 狀態: from === 'db' ? '結案' : '進行中',
+    價位: n['價位'] || n['成交價'] || '', 折扣: n['折扣'] || '0', 已付金額: n['已付金額'] || (paid ? String(paid) : '') });
+  return calcTaxi(n);
+}
+function toSalesRecord(r) {
+  const n = JSON.parse(JSON.stringify(r)); const f = flowOf(n);
+  if (f['登記領牌資料'] && !f['領牌']) f['領牌'] = f['登記領牌資料'];
+  const closed = n['狀態'] === '結案';
+  Object.assign(n, { 類型: '一般', 流程: f, 成交價: n['成交價'] || n['價位'] || '', 狀態: closed ? '已歸檔' : '進行中' });
+  if (closed && !n['歸檔時間']) n['歸檔時間'] = stamp();
+  return { rec: payCalc(n), to: closed ? 'db' : 'sales' };
+}
+async function moveRecord(from, to, rec) {
+  try { return (await api('move', { from, to, record: rec })).record; }
+  catch (e) {
+    if (!/未知的動作/.test(e.message)) throw e;      // 後端還沒更新：先存到新的地方，再刪掉舊的
+    const j = await api('save', { sheet: to, record: rec });
+    await api('delete', { sheet: from, id: rec.id });
+    return j.record;
+  }
+}
+async function convertRecord(kind, id) {
+  const r = findRec(kind, id); if (!r) return;
+  const toTaxi = kind !== 'taxi';
+  const name = r['客戶姓名'] || '這台車';
+  const plan = toTaxi ? { rec: toTaxiRecord(r, kind), to: 'taxi' } : toSalesRecord(r);
+  const where = { sales: '本月銷售', db: '車輛資料庫', taxi: plan.rec['狀態'] === '結案' ? '計程車（已結案）' : '計程車' }[plan.to];
+  if (!confirm(`把「${name}」${toTaxi ? '轉成計程車' : '轉成一般車'}？\n會移到「${where}」，資料都會保留。`)) return;
+  try {
+    const saved = await moveRecord(kind, plan.to, plan.rec);
+    data[kind] = data[kind].filter(x => x.id !== id); upsertLocal(plan.to, saved || plan.rec);
+    render(); openDetail(plan.to, (saved || plan.rec).id);
+    toast(`已${toTaxi ? '轉成計程車' : '轉成一般車'}`);
+  } catch (e) { toast('轉換失敗：' + e.message); }
 }
 
 /* ---------- 零用金 ---------- */
@@ -1274,9 +1348,9 @@ function viewDb() {
 function viewSettings() {
   return pwSection() + `<section class="block">
       <h4>匯入原廠受訂報告</h4>
-      <p class="muted" style="margin:0 0 10px">選原廠系統匯出的受訂報告（PSLD090，.xls）。同一張訂單匯入過就會略過，可以每個月重複匯入。</p>
+      <p class="muted" style="margin:0 0 10px">選原廠系統匯出的受訂報告（PSLD090，.xls），可以一次選好幾個檔案。同一張訂單匯入過就會略過，可以每個月重複匯入。</p>
       <button class="btn primary wide" id="importBtn" style="width:100%">選擇檔案匯入</button>
-      <input type="file" id="importFile" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <input type="file" id="importFile" multiple accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </section>
     <section class="block">
       <h4>連接 Google 試算表</h4>
@@ -1296,7 +1370,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v24</p>
+      <p class="app-ver">App 版本 v25</p>
     </section>`;
 }
 
@@ -1385,6 +1459,7 @@ function openDetail(kind, id) {
   if (kind === 'sales') actions = (f['整備'] && !f['交車'] ? `<button class="btn wide" data-act="notify">LINE 通知${NOTIFY_NAME}${r['整備通知時間'] ? '（已通知 ' + esc(r['整備通知時間'].slice(5)) + '）' : ''}</button>` : '')
     + `<button class="btn ${nx ? '' : 'good'} wide" data-act="archive">歸檔到資料庫</button>`;
   if (kind === 'taxi') actions = closed ? `<button class="btn wide" data-act="reopen">重新開啟</button>` : `<button class="btn ${nx ? '' : 'good'} wide" data-act="close">結案</button>`;
+  actions += kind === 'taxi' ? `<button class="btn wide convert" data-act="convert">轉成一般車</button>` : `<button class="btn wide convert" data-act="convert">轉成計程車</button>`;
 
   $('#panel').innerHTML = `
     <div class="panel-head">
@@ -1692,6 +1767,7 @@ document.addEventListener('click', async e => {
     return;
   }
   if (act === 'notify') { openNotifySheet(); return; }
+  if (act === 'convert') { convertRecord(kind, id); return; }
   if (act === 'archive') {
     const r = findRec('sales', id); const nx = nextStep(r, 'sales'); const rm = pendingReminders(r);
     const warn = [nx ? `還有步驟沒完成（下一步：${nx}）` : '', ...rm].filter(Boolean);
@@ -1715,7 +1791,7 @@ document.addEventListener('click', async e => {
 });
 
 document.addEventListener('keydown', e => { const c = e.target.closest?.('div[data-open]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
-document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files[0]) startImport(e.target.files[0]); });
+document.addEventListener('change', e => { if (e.target.id === 'importFile' && e.target.files.length) startImport([...e.target.files]); });
 document.getElementById('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeStepSheet(); });
 document.addEventListener('input', e => {
   e.target.closest('.field')?.classList.remove('invalid');
