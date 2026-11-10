@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v26';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v27';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -221,11 +221,7 @@ function ocr_(b64, mime) {
   const payload = [].concat(Utilities.newBlob(head).getBytes(), Utilities.base64Decode(b64), Utilities.newBlob(tail).getBytes());
   const up = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=zh&fields=id', {
     method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: payload, headers: auth, muteHttpExceptions: true });
-  if (up.getResponseCode() !== 200) {
-    const msg = up.getContentText();
-    if (/insufficient|scope|permission|PERMISSION/i.test(msg)) throw new Error('還沒有讀照片的權限：請把 Apps Script 的 Code.gs 換成最新版，執行 setup 並部署新版本（只要一次）');
-    throw new Error('照片辨識失敗（' + up.getResponseCode() + '）');
-  }
+  if (up.getResponseCode() !== 200) throw new Error(driveError_(up, token));
   const id = JSON.parse(up.getContentText()).id;
   try {
     const ex = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: auth, muteHttpExceptions: true });
@@ -234,6 +230,21 @@ function ocr_(b64, mime) {
   } finally {
     UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id, { method: 'delete', headers: auth, muteHttpExceptions: true });
   }
+}
+
+/** 把雲端硬碟的錯誤翻成看得懂、知道下一步的話 */
+function driveError_(res, token) {
+  let reason = '';
+  try { const e = JSON.parse(res.getContentText()).error; reason = (e.errors && e.errors[0] && e.errors[0].reason) || e.status || e.message || ''; } catch (err) {}
+  let scopes = '';
+  try { scopes = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + token, { muteHttpExceptions: true }).getContentText()).scope || ''; } catch (err) {}
+  if (scopes && !/auth\/drive/.test(scopes)) {
+    return '還沒有讀照片的權限：Apps Script 裡的 Code.gs 還是舊的，或換了之後沒有執行 setup、沒有部署新版本';
+  }
+  if (/accessNotConfigured|SERVICE_DISABLED|has not been used|disabled/i.test(res.getContentText())) {
+    return '要先開啟雲端硬碟服務：Apps Script 左邊「服務」旁的 ＋ → 選 Drive API → 新增，然後部署新版本';
+  }
+  return '照片辨識失敗（' + res.getResponseCode() + (reason ? '，' + reason : '') + '）';
 }
 
 function remove_(key, id) {
