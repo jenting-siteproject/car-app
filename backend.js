@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v27';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v28';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -211,6 +211,10 @@ function move_(from, to, rec) {
  */
 function ocr_(b64, mime) {
   if (!b64) throw new Error('沒有收到照片');
+  try { DriveApp.getRootFolder(); }   // 先確認這個部署有雲端硬碟權限
+  catch (err) {
+    throw new Error('手機連到的部署還沒有雲端硬碟權限。請到 Apps Script「部署 → 管理部署作業」，編輯原本那一個（網址要和 App 設定頁的一樣），版本選「新版本」再部署');
+  }
   const token = ScriptApp.getOAuthToken();
   const auth = { Authorization: 'Bearer ' + token };
   const boundary = 'carpwa' + Date.now();
@@ -244,7 +248,10 @@ function driveError_(res, token) {
   if (/accessNotConfigured|SERVICE_DISABLED|has not been used|disabled/i.test(res.getContentText())) {
     return '要先開啟雲端硬碟服務：Apps Script 左邊「服務」旁的 ＋ → 選 Drive API → 新增，然後部署新版本';
   }
-  return '照片辨識失敗（' + res.getResponseCode() + (reason ? '，' + reason : '') + '）';
+  let detail = '';
+  try { detail = (JSON.parse(res.getContentText()).error.message || '').slice(0, 120); } catch (err) {}
+  const short = (scopes || '').split(' ').map(s => s.replace('https://www.googleapis.com/auth/', '')).filter(Boolean).join(',');
+  return '照片辨識失敗（' + res.getResponseCode() + (reason ? '，' + reason : '') + '）' + (detail ? '：' + detail : '') + (short ? '［權限：' + short + '］' : '');
 }
 
 function remove_(key, id) {
