@@ -991,6 +991,27 @@ async function readOrderReport(file) {
   const H = rows[hi].map(h => String(h).trim());
   return rows.slice(hi + 1).map(r => Object.fromEntries(H.map((h, i) => [h, String(r[i] ?? '').trim()]))).filter(o => o['訂單編號']);
 }
+/* ---------- 訂單配對：手動建立的車（沒有訂單編號）⇄ 原廠訂單 ---------- */
+const ORDER_KEYS = ['訂單編號', '受訂日', '型號', '契約書號', '訂約人', '使用人', '原廠狀態', '合約配件金額'];
+const nmOf = v => String(v || '').replace(/[\s（）()]/g, '');
+const namesOf = r => [r['客戶姓名'], r['原訂單客戶'], r['訂約人'], r['使用人']].map(nmOf).filter(x => x.length >= 2);
+const sameName = (a, b) => a === b || (Math.min(a.length, b.length) >= 2 && (a.includes(b) || b.includes(a)));
+const namesMeet = (A, B) => A.some(a => B.some(b => sameName(a, b)));
+const isOpen = (k, r) => (k === 'sales') || (k === 'taxi' && r['狀態'] !== '結案');
+// 把原廠訂單的資料補進手動建立的那筆：訂單欄位一律帶入，其他欄位只補空白的，流程合併
+function mergeInto(cur, src) {
+  const n = JSON.parse(JSON.stringify(cur));
+  ORDER_KEYS.forEach(k => { if (src[k]) n[k] = src[k]; });
+  Object.keys(src).forEach(k => {
+    if (['id', '建立時間', '更新時間', '流程', '狀態', '類型', '歸檔時間'].includes(k) || ORDER_KEYS.includes(k)) return;
+    if ((n[k] === '' || n[k] == null) && src[k] !== '' && src[k] != null) n[k] = src[k];
+  });
+  const f = flowOf(n), g = flowOf(src);
+  Object.keys(g).forEach(s => { if (!f[s]) f[s] = g[s]; });
+  n['流程'] = f;
+  return n;
+}
+
 function planImport(list) {
   const where = new Map();
   ['db', 'sales', 'taxi'].forEach(k => data[k].forEach(x => { if (x['訂單編號']) where.set(x['訂單編號'], { kind: k, rec: x }); }));
@@ -1027,6 +1048,20 @@ function planImport(list) {
       payCalc(r); plan.items.push({ sheet: done ? 'db' : 'sales', record: r }); done ? plan.dbDone++ : plan.salesNew++;
     }
   });
+  plan.links = [];
+  const loose = ['sales', 'taxi'].flatMap(k => data[k].filter(r => !r['訂單編號'] && isOpen(k, r)).map(r => ({ kind: k, rec: r })));
+  if (loose.length) {
+    const open = plan.items.filter(it => it.sheet !== 'db' && it.record['狀態'] !== '結案');
+    const cand = new Map(open.map(it => [it, loose.filter(w => namesMeet(namesOf(w.rec), namesOf(it.record)))]));
+    const used = new Map(); open.forEach(it => cand.get(it).forEach(w => used.set(w, (used.get(w) || 0) + 1)));
+    open.forEach(it => {
+      const c = cand.get(it);
+      if (c.length !== 1 || used.get(c[0]) !== 1) return;     // 只有一對一的才自動配
+      plan.links.push({ kind: c[0].kind, rec: mergeInto(c[0].rec, it.record) });
+      plan.items.splice(plan.items.indexOf(it), 1);
+      it.sheet === 'taxi' ? plan.taxiNew-- : plan.salesNew--;
+    });
+  }
   return plan;
 }
 async function startImport(files) {
@@ -1039,7 +1074,7 @@ async function startImport(files) {
   list = [...byNo.values()];
   const p = planImport(list);
   const line = (label, n, note = '') => `<li><span>${label}${note ? `<small>${note}</small>` : ''}</span><b>${n} 筆</b></li>`;
-  const total = p.items.length + p.moves.length;
+  const total = p.items.length + p.moves.length + p.links.length;
   openFormSheet({
     title: '匯入受訂報告', specs: [],
     top: `<section class="block calc"><h4>${files.length > 1 ? `${files.length} 個檔案` : esc(files[0].name)}：共 ${list.length} 張訂單</h4><ul class="pays imp">
@@ -1048,6 +1083,7 @@ async function startImport(files) {
       ${line('車輛資料庫', p.dbDone, '已交車的一般車')}
       ${line('計程車（已結案）', p.taxiDone, '已交車的計程車')}
       ${p.moves.length ? line('改成計程車', p.moves.length, '之前匯入成一般車，現在轉過去') : ''}
+      ${p.links.length ? line('補上訂單編號', p.links.length, '手動建立的車：' + p.links.map(l => esc(l.rec['客戶姓名'])).join('、')) : ''}
       ${line('不匯入', p.skipped.length, SKIP_STATUS.join('、') + '的訂單')}
       ${line('已經匯入過', p.dup, '同一張訂單編號，略過')}
       </ul>
@@ -1055,19 +1091,20 @@ async function startImport(files) {
     okText: total ? `匯入 ${total} 筆` : '沒有新資料，關閉',
     onOk: async () => {
       if (!total) return;
-      let added = 0, skipped = 0, moved = 0;
+      let added = 0, skipped = 0, moved = 0, linked = 0;
       try {
         for (let i = 0; i < p.items.length; i += IMPORT_CHUNK) {
           toast(`匯入中，請不要關閉 App…（${Math.min(i + IMPORT_CHUNK, p.items.length)} / ${p.items.length}）`);
           const j = await api('bulk', { items: p.items.slice(i, i + IMPORT_CHUNK) });
           added += j.added || 0; skipped += j.skipped || 0;
         }
+        for (const l of p.links) { await api('save', { sheet: l.kind, record: l.rec }); linked++; }
         for (const w of p.moves) {
           toast(`改成計程車…（${moved + 1} / ${p.moves.length}）`);
           await moveRecord(w.kind, 'taxi', toTaxiRecord(w.rec, w.kind)); moved++;
         }
         await sync(true);
-        toast(`匯入完成：新增 ${added} 筆${moved ? `，改成計程車 ${moved} 筆` : ''}${skipped ? `，略過 ${skipped} 筆重複` : ''}`);
+        toast(`匯入完成：新增 ${added} 筆${linked ? `，補上訂單編號 ${linked} 筆` : ''}${moved ? `，改成計程車 ${moved} 筆` : ''}${skipped ? `，略過 ${skipped} 筆重複` : ''}`);
       } catch (e) {
         await sync(true);
         toast(`匯入到一半失敗：${e.message}（已完成 ${added} 筆，再匯入一次會接著做）`);
@@ -1181,6 +1218,51 @@ async function startLicense(file) {
   });
 }
 const DEMO_LICENSE_TEXT = '汽車行車執照\n車號 RAB-8899\n車主 黃小姐\n廠牌 TOYOTA\n型式 NSP170G\n引擎號碼 2NR1234567\n車身號碼 RKLBB3HE5P1234567\n發照日期 115年11月05日';
+
+/* ---------- 找訂單編號：從已匯入的訂單裡挑一筆合併 ---------- */
+let ordSel = null;
+function orderCandidates(kind, r) {
+  const mine = namesOf(r), myPrice = Number(r['價位']) || Number(r['成交價']) || 0;
+  const myDate = r['受訂日'] || (r['建立時間'] || '').slice(0, 10) || (r['月份'] ? r['月份'] + '-15' : '');
+  return ['sales', 'taxi', 'db'].flatMap(k => data[k].filter(x => x.id !== r.id && x['訂單編號']).map(x => ({ kind: k, r: x })))
+    .map(c => {
+      let sc = 0; const why = [];
+      if (namesMeet(mine, namesOf(c.r))) { sc += 4; why.push('名字'); }
+      const p = Number(c.r['價位']) || Number(c.r['成交價']) || 0;
+      if (myPrice && p && Math.abs(p - myPrice) / myPrice < 0.02) { sc += 2; why.push('價錢'); }
+      if (c.kind === kind || (kind !== 'taxi') === (c.kind !== 'taxi')) sc += 1;
+      if (isOpen(c.kind, c.r)) sc += 2;
+      if (myDate && c.r['受訂日'] && Math.abs(new Date(myDate) - new Date(c.r['受訂日'])) < 60 * 864e5) { sc += 1; why.push('日期'); }
+      return { ...c, sc, why };
+    })
+    .filter(c => c.why.includes('名字') || c.why.includes('價錢'))
+    .sort((a, b) => b.sc - a.sc || String(b.r['受訂日'] || '').localeCompare(String(a.r['受訂日'] || ''))).slice(0, 8);
+}
+function openFindOrder(kind, id) {
+  const r = findRec(kind, id); if (!r) return;
+  const list = orderCandidates(kind, r); ordSel = list.length === 1 ? list[0] : null;
+  const where = { sales: '本月銷售', taxi: '計程車', db: '資料庫' };
+  openFormSheet({
+    title: '找訂單編號', specs: [],
+    hint: '從已經匯入的原廠訂單裡，找名字或價錢對得上的。選好後兩筆會合併成一筆，保留這台的資料和流程，補上訂單編號。',
+    top: list.length ? `<section class="block calc"><h4>可能是這幾張（點選一張）</h4><div class="lic-pick">${list.map(c =>
+      `<button type="button" class="lic-car" data-ordpick="${c.kind}:${esc(c.r.id)}" aria-pressed="${ordSel === c}">${esc(c.r['訂單編號'])}　${esc(c.r['客戶姓名'] || '')}
+        <small>${esc(fmtD(c.r['受訂日']))}　${esc(c.r['車型'] || '')}　${fmtMoney(c.r['價位'] || c.r['成交價']) || ''}　${where[c.kind]}${c.r['原廠狀態'] ? '　' + esc(c.r['原廠狀態']) : ''}<br>使用人 ${esc(c.r['使用人'] || '—')}｜對上：${c.why.join('、')}</small></button>`).join('')}</div></section>`
+      : `<section class="block calc"><h4 class="c-red">找不到對得上的訂單</h4><p class="muted" style="margin:0">先到「設定」匯入最新的受訂報告再試，或按「編輯」直接輸入訂單編號。</p></section>`,
+    okText: '合併並補上訂單編號',
+    validate: () => ordSel ? '' : (list.length ? '請先點選是哪一張訂單' : '找不到可以合併的訂單'),
+    onOk: () => mergeOrder(kind, id, ordSel.kind, ordSel.r.id),
+  });
+}
+async function mergeOrder(kind, id, okind, oid) {
+  const cur = findRec(kind, id), src = findRec(okind, oid); if (!cur || !src) return;
+  const merged = mergeInto(cur, src);
+  try {
+    const j = await api('save', { sheet: kind, record: merged }); upsertLocal(kind, j.record);
+    await api('delete', { sheet: okind, id: oid }); data[okind] = data[okind].filter(x => x.id !== oid); saveCache();
+    render(); openDetail(kind, id); toast(`已補上訂單編號 ${merged['訂單編號']}，兩筆合併成一筆`);
+  } catch (e) { toast('合併失敗：' + e.message); }
+}
 
 /* ---------- 一般車 ⇄ 計程車 ---------- */
 function toTaxiRecord(r, from) {
@@ -1506,7 +1588,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v30</p>
+      <p class="app-ver">App 版本 v31</p>
     </section>`;
 }
 
@@ -1604,7 +1686,7 @@ function openDetail(kind, id) {
       <button class="btn" data-act="edit">編輯</button>
     </div>
     <div class="panel-body">
-      <div class="hero">${plateHtml(r, true)}<div class="ord-big">訂單編號 ${r['訂單編號'] ? `<b>${esc(r['訂單編號'])}</b>` : '<b class="none">未填</b>'}</div><h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
+      <div class="hero">${plateHtml(r, true)}<div class="ord-big">訂單編號 ${r['訂單編號'] ? `<b>${esc(r['訂單編號'])}</b>` : `<b class="none">未填</b> <button class="btn mini2" data-act="findorder">找訂單編號</button>`}</div><h3>${esc(r['客戶姓名'] || '未填客戶')}</h3>
         <div class="tags">${r['月份'] ? `<span class="tag gray">${fmtMonth(r['月份'])}</span>` : ''}${closed ? '<span class="tag green">已結案</span>' : ''}${r['狀態'] === '已歸檔' ? '<span class="tag green">已歸檔</span>' : ''}${insuranceTags(r)}${kind === 'sales' ? remindTags(r) : ''}</div>
       </div>
       ${kind === 'db' ? renewBlock(r) : ''}
@@ -1858,6 +1940,10 @@ document.addEventListener('click', async e => {
     licTarget = t.dataset.lic === 'any' ? null : { kind: t.dataset.lic.split(':')[0], id: t.dataset.lic.split(':')[1] };
     $('#licFile').value = ''; $('#licFile').click(); return;
   }
+  if (t.dataset.ordpick) {
+    const [k, oid] = t.dataset.ordpick.split(':'); const r = findRec(k, oid); ordSel = r ? { kind: k, r } : null;
+    document.querySelectorAll('[data-ordpick]').forEach(b => b.setAttribute('aria-pressed', b === t)); return;
+  }
   if (t.dataset.licpick) {
     const [k, id] = t.dataset.licpick.split(':'); const r = findRec(k, id); licSel = r ? { kind: k, r } : null;
     document.querySelectorAll('.lic-car').forEach(b => b.setAttribute('aria-pressed', b === t)); return;
@@ -1927,6 +2013,7 @@ document.addEventListener('click', async e => {
   }
   if (act === 'notify') { openNotifySheet(); return; }
   if (act === 'convert') { convertRecord(kind, id); return; }
+  if (act === 'findorder') { openFindOrder(kind, id); return; }
   if (act === 'archive') {
     const r = findRec('sales', id); const nx = nextStep(r, 'sales'); const rm = pendingReminders(r);
     const warn = [nx ? `還有步驟沒完成（下一步：${nx}）` : '', ...rm].filter(Boolean);
