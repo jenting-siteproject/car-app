@@ -750,6 +750,10 @@ function demoApi(action, p) {
       d[sheet].push({ ...record, id: Math.random().toString(36).slice(2, 10), 建立時間: stamp(), 更新時間: stamp() }); out.added++;
     });
   }
+  if (action === 'saveMany') {
+    p.items.forEach(({ sheet, record }) => { const i = d[sheet].findIndex(x => x.id === record.id); const r = { ...record, 更新時間: stamp() }; i >= 0 ? (d[sheet][i] = r) : d[sheet].push(r); });
+    out.saved = p.items.length;
+  }
   if (action === 'move') {
     d[p.from] = d[p.from].filter(x => x.id !== p.record.id);
     const r = { ...p.record, 更新時間: stamp() }; const i = d[p.to].findIndex(x => x.id === r.id);
@@ -987,9 +991,10 @@ async function readOrderReport(file) {
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
   const hi = rows.findIndex(r => r.includes('訂單編號') && r.includes('領照人'));
-  if (hi < 0) throw new Error('看不懂這個檔案：找不到「訂單編號」「領照人」欄位，請確認是受訂報告');
+  if (hi < 0) throw new Error('看不懂這個檔案：找不到「訂單編號」「領照人」欄位，請確認是原廠的受訂報告（PSLD090）或交車報表（PSLT010）');
   const H = rows[hi].map(h => String(h).trim());
-  return rows.slice(hi + 1).map(r => Object.fromEntries(H.map((h, i) => [h, String(r[i] ?? '').trim()]))).filter(o => o['訂單編號']);
+  const type = H.includes('引擎號碼') ? 'PSLT010' : 'PSLD090';   // PSLT010 有引擎號碼、車牌、交車日
+  return rows.slice(hi + 1).map(r => ({ ...Object.fromEntries(H.map((h, i) => [h, String(r[i] ?? '').trim()]).filter(([h]) => h)), _type: type })).filter(o => o['訂單編號']);
 }
 /* ---------- 訂單配對：手動建立的車（沒有訂單編號）⇄ 原廠訂單 ---------- */
 const ORDER_KEYS = ['訂單編號', '受訂日', '型號', '契約書號', '訂約人', '使用人', '原廠狀態', '合約配件金額'];
@@ -1048,8 +1053,13 @@ function planImport(list) {
       payCalc(r); plan.items.push({ sheet: done ? 'db' : 'sales', record: r }); done ? plan.dbDone++ : plan.salesNew++;
     }
   });
+  return plan;
+}
+// 進行中的新訂單，如果一對一對上手動建立的車（沒有訂單編號），就補進那台，不另外新增
+function linkByName(plan) {
   plan.links = [];
-  const loose = ['sales', 'taxi'].flatMap(k => data[k].filter(r => !r['訂單編號'] && isOpen(k, r)).map(r => ({ kind: k, rec: r })));
+  const taken = new Set((plan.updates || []).map(u => u.rec.id));
+  const loose = ['sales', 'taxi'].flatMap(k => data[k].filter(r => !r['訂單編號'] && isOpen(k, r) && !taken.has(r.id)).map(r => ({ kind: k, rec: r })));
   if (loose.length) {
     const open = plan.items.filter(it => it.sheet !== 'db' && it.record['狀態'] !== '結案');
     const cand = new Map(open.map(it => [it, loose.filter(w => namesMeet(namesOf(w.rec), namesOf(it.record)))]));
@@ -1064,30 +1074,118 @@ function planImport(list) {
   }
   return plan;
 }
+/* ---------- 交車報表（PSLT010）：補引擎號碼、車牌、領牌日、交車日 ---------- */
+function fillFromDelivery(rec, o) {
+  const n = JSON.parse(JSON.stringify(rec)); const changed = [];
+  const set = (k, v) => { v = String(v ?? '').trim(); if (v && !n[k]) { n[k] = v; changed.push(k); } };
+  const eng = String(o['引擎號碼'] || '').trim().toUpperCase();
+  if (eng && !NORM(n['引擎號碼']).includes(NORM(eng)) && !NORM(n['車身號碼']).includes(NORM(eng))) set(NORM(eng).length >= 17 ? '車身號碼' : '引擎號碼', eng);
+  set('車牌', String(o['車牌號碼'] || '').toUpperCase());
+  set('領牌日', dateOf(o['監理所登錄日']) || dateOf(o['登錄日']));
+  set('交車日', dateOf(o['交車日']));
+  set('年式', String(o['年式'] || '').replace(/\.0+$/, ''));
+  const kp = numOf(o['車價(千)']); if (kp) set('車價', String(kp * 1000));
+  set('發票號碼', o['發票號碼']); const inv = numOf(o['發票金額']); if (inv) set('發票金額', String(inv));
+  set('受訂日', dateOf(o['受訂日'])); set('型號', [o['車型'], o['SFX']].filter(Boolean).join(' ')); set('車型', o['車名']);
+  return { rec: n, changed };
+}
+function buildFromDelivery(o) {
+  const date = dateOf(o['受訂日']), done = !!dateOf(o['交車日']);
+  const isTaxi = isTaxiBy(o['領照人']), price = numOf(o['發票金額']) || numOf(o['車價(千)']) * 1000;
+  const r = fillFromDelivery({ 訂單編號: o['訂單編號'], 月份: date.slice(0, 7), 客戶姓名: o['領照人'], 廠牌: 'Toyota',
+    特殊備註: o['備註'], 原廠狀態: done ? '交車' : '', 流程: {} }, o).rec;
+  if (isTaxi) {
+    Object.assign(r, { 類型: '計程車', 價位: price ? String(price) : '', 折扣: '0', 狀態: done ? '結案' : '進行中', 已付金額: done && price ? String(price) : '' });
+    return { sheet: 'taxi', record: calcTaxi(r), done };
+  }
+  Object.assign(r, { 類型: '一般', 成交價: price ? String(price) : '', 狀態: done ? '已歸檔' : '進行中' });
+  if (done) { r['歸檔時間'] = stamp(); if (price) r['收款紀錄'] = `${date}|${price}|已交車（匯入時視為付清）`; }
+  return { sheet: done ? 'db' : 'sales', record: payCalc(r), done };
+}
+function planFill(rows, plan) {
+  const byNo = new Map(), byEng = new Map(), upd = new Map();
+  ['db', 'sales', 'taxi'].forEach(k => data[k].forEach(r => {
+    if (r['訂單編號']) byNo.set(r['訂單編號'], { kind: k, rec: r });
+    else [r['引擎號碼'], r['車身號碼']].map(NORM).filter(x => x.length >= 6).forEach(e => byEng.set(e, { kind: k, rec: r }));
+  }));
+  const pending = new Map(plan.items.map(it => [it.record['訂單編號'], it]));
+  plan.noProgress = []; plan.drops = [];
+  rows.forEach(o => {
+    const no = o['訂單編號'], eng = NORM(o['引擎號碼']);
+    const it = pending.get(no);
+    if (it) {                                                                // 同一批剛從受訂報告要新增的
+      const m0 = eng && byEng.get(eng);
+      if (m0 && !upd.has(m0.rec.id)) {                                       // 其實是手動建立過的車 → 補進那台，不新增
+        const f = fillFromDelivery(mergeInto(m0.rec, it.record), o);
+        upd.set(m0.rec.id, { kind: m0.kind, rec: f.rec, linked: true });
+        plan.items.splice(plan.items.indexOf(it), 1); pending.delete(no);
+        const st = it.record['狀態']; it.sheet === 'taxi' ? (st === '結案' ? plan.taxiDone-- : plan.taxiNew--) : (it.sheet === 'db' ? plan.dbDone-- : plan.salesNew--);
+        return;
+      }
+      it.record = fillFromDelivery(it.record, o).rec; return;
+    }
+    let w = byNo.get(no), linked = false;
+    const m = eng && byEng.get(eng);
+    if (w && m && m.rec.id !== w.rec.id && !plan.drops.some(d => d.rec.id === w.rec.id)) {
+      // 同一台車有兩筆：手動建立的（有引擎號碼、沒訂單編號）＋匯入的（有訂單編號）→ 合併到手動那筆，刪掉匯入那筆
+      plan.drops.push(w); w = { kind: m.kind, rec: mergeInto(m.rec, w.rec) }; linked = 'merge';
+    } else if (!w && m) { w = m; linked = true; }                         // 手動建立的車：用引擎號碼對上
+    if (w) {
+      const prev = upd.get(w.rec.id); const f = fillFromDelivery(prev ? prev.rec : w.rec, o);
+      if (linked) { ORDER_KEYS.forEach(k => { if (k === '訂單編號') f.rec[k] = no; }); f.changed.push('訂單編號'); }
+      if (f.changed.length || linked) upd.set(w.rec.id, { kind: w.kind, rec: f.rec, linked: linked || (prev && prev.linked) || false });
+      return;
+    }
+    const progress = eng || ['配件日', '配車日', '販賣日', '登錄日', '交車日'].some(k => o[k]);
+    if (!progress) { plan.noProgress.push(o); return; }                     // 只有受訂日：可能是暫退，或剛下訂
+    const b = buildFromDelivery(o); plan.items.push({ sheet: b.sheet, record: b.record }); pending.set(no, plan.items[plan.items.length - 1]);
+    b.sheet === 'taxi' ? (b.done ? plan.taxiDone++ : plan.taxiNew++) : (b.done ? plan.dbDone++ : plan.salesNew++);
+  });
+  plan.updates = [...upd.values()];
+}
+async function saveMany(list) {
+  for (let i = 0; i < list.length; i += 100) {
+    const part = list.slice(i, i + 100);
+    try { await api('saveMany', { items: part.map(u => ({ sheet: u.kind, record: u.rec })) }); }
+    catch (e) {
+      if (!/未知的動作/.test(e.message)) throw e;      // 後端還沒更新：一筆一筆存
+      for (const u of part) await api('save', { sheet: u.kind, record: u.rec });
+    }
+  }
+}
+
 async function startImport(files) {
   let list = [];
   try {
     toast('讀取檔案中…');
     for (const f of files) list = list.concat(await readOrderReport(f));
   } catch (e) { toast(e.message); return; }
-  const byNo = new Map(); list.forEach(o => byNo.set(o['訂單編號'], o));   // 同一張訂單出現在多個檔案，用後面的
+  const byNo = new Map(); list.forEach(o => byNo.set(o._type + o['訂單編號'], o));   // 同一種報表裡同一張訂單出現在多個檔案，用後面的
   list = [...byNo.values()];
-  const p = planImport(list);
+  const d090 = list.filter(o => o._type !== 'PSLT010'), t010 = list.filter(o => o._type === 'PSLT010');
+  const p = planImport(d090);
+  planFill(t010, p);
+  linkByName(p);
   const line = (label, n, note = '') => `<li><span>${label}${note ? `<small>${note}</small>` : ''}</span><b>${n} 筆</b></li>`;
-  const total = p.items.length + p.moves.length + p.links.length;
+  const engL = p.updates.filter(u => u.linked === true), fill = p.updates.filter(u => !u.linked);
+  const total = p.items.length + p.moves.length + p.links.length + p.updates.length + p.drops.length;
   openFormSheet({
-    title: '匯入受訂報告', specs: [],
+    title: '匯入原廠報表', specs: [],
     top: `<section class="block calc"><h4>${files.length > 1 ? `${files.length} 個檔案` : esc(files[0].name)}：共 ${list.length} 張訂單</h4><ul class="pays imp">
       ${line('本月銷售（進行中）', p.salesNew)}
       ${line('計程車（進行中）', p.taxiNew)}
       ${line('車輛資料庫', p.dbDone, '已交車的一般車')}
       ${line('計程車（已結案）', p.taxiDone, '已交車的計程車')}
       ${p.moves.length ? line('改成計程車', p.moves.length, '之前匯入成一般車，現在轉過去') : ''}
-      ${p.links.length ? line('補上訂單編號', p.links.length, '手動建立的車：' + p.links.map(l => esc(l.rec['客戶姓名'])).join('、')) : ''}
+      ${p.links.length ? line('補上訂單編號', p.links.length, '用名字對上手動建立的車：' + p.links.map(l => esc(l.rec['客戶姓名'])).join('、')) : ''}
+      ${engL.length ? line('用引擎號碼補上訂單編號', engL.length, '手動建立的車：' + engL.map(u => esc(u.rec['客戶姓名'])).join('、')) : ''}
+      ${p.drops.length ? line('合併重複的車', p.drops.length, '同一個引擎號碼有兩筆：' + p.drops.map(d => esc(d.rec['客戶姓名'])).join('、') + '，留手動建立的那筆') : ''}
+      ${fill.length ? line('補上引擎號碼、車牌等', fill.length, '已經在 App 裡的車，只補空白的欄位') : ''}
+      ${p.noProgress.length ? line('交車報表裡沒有進度的', p.noProgress.length, '可能是暫退或剛下訂，沒匯入；請用受訂報告匯入') : ''}
       ${line('不匯入', p.skipped.length, SKIP_STATUS.join('、') + '的訂單')}
       ${line('已經匯入過', p.dup, '同一張訂單編號，略過')}
       </ul>
-      <p class="muted" style="margin:10px 0 0">領照人名稱有「交通」「計程車」「的士」，或領照人、訂約人、使用人是${TAXI_PEOPLE.join('、')}的，歸到計程車。身分證字號、虛擬帳號不會匯入。</p></section>`,
+      <p class="muted" style="margin:10px 0 0">${t010.length ? `交車報表（PSLT010）${t010.length} 張、` : ''}${d090.length ? `受訂報告（PSLD090）${d090.length} 張。` : ''}領照人名稱有「交通」「計程車」「的士」，或領照人、訂約人、使用人是${TAXI_PEOPLE.join('、')}的，歸到計程車。身分證字號、虛擬帳號不會匯入。</p></section>`,
     okText: total ? `匯入 ${total} 筆` : '沒有新資料，關閉',
     onOk: async () => {
       if (!total) return;
@@ -1098,13 +1196,15 @@ async function startImport(files) {
           const j = await api('bulk', { items: p.items.slice(i, i + IMPORT_CHUNK) });
           added += j.added || 0; skipped += j.skipped || 0;
         }
-        for (const l of p.links) { await api('save', { sheet: l.kind, record: l.rec }); linked++; }
+        const ups = [...p.links.map(l => ({ kind: l.kind, rec: l.rec })), ...p.updates];
+        if (ups.length) { toast(`補資料中…（${ups.length} 筆）`); await saveMany(ups); linked = p.links.length + engL.length + p.drops.length; }
+        for (const d of p.drops) await api('delete', { sheet: d.kind, id: d.rec.id });
         for (const w of p.moves) {
           toast(`改成計程車…（${moved + 1} / ${p.moves.length}）`);
           await moveRecord(w.kind, 'taxi', toTaxiRecord(w.rec, w.kind)); moved++;
         }
         await sync(true);
-        toast(`匯入完成：新增 ${added} 筆${linked ? `，補上訂單編號 ${linked} 筆` : ''}${moved ? `，改成計程車 ${moved} 筆` : ''}${skipped ? `，略過 ${skipped} 筆重複` : ''}`);
+        toast(`匯入完成：新增 ${added} 筆${linked ? `，補上訂單編號 ${linked} 筆` : ''}${fill.length ? `，補上引擎號碼等 ${fill.length} 筆` : ''}${moved ? `，改成計程車 ${moved} 筆` : ''}${skipped ? `，略過 ${skipped} 筆重複` : ''}`);
       } catch (e) {
         await sync(true);
         toast(`匯入到一半失敗：${e.message}（已完成 ${added} 筆，再匯入一次會接著做）`);
@@ -1565,8 +1665,8 @@ function viewDb() {
 
 function viewSettings() {
   return pwSection() + `<section class="block">
-      <h4>匯入原廠受訂報告</h4>
-      <p class="muted" style="margin:0 0 10px">選原廠系統匯出的受訂報告（PSLD090，.xls），可以一次選好幾個檔案。同一張訂單匯入過就會略過，可以每個月重複匯入。</p>
+      <h4>匯入原廠報表</h4>
+      <p class="muted" style="margin:0 0 10px">選原廠系統匯出的受訂報告（PSLD090）或交車報表（PSLT010，有引擎號碼和車牌），可以一次選好幾個檔案。同一張訂單匯入過就會略過，可以每個月重複匯入。</p>
       <button class="btn primary wide" id="importBtn" style="width:100%">選擇檔案匯入</button>
       <input type="file" id="importFile" multiple accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </section>
@@ -1588,7 +1688,7 @@ function viewSettings() {
       <h4>資料</h4>
       <p class="muted" style="margin:0 0 10px">上次同步的資料會存在手機上，沒網路時也能查看。</p>
       <button class="btn" id="clearCache">清除手機上的暫存</button>
-      <p class="app-ver">App 版本 v31</p>
+      <p class="app-ver">App 版本 v32</p>
     </section>`;
 }
 
@@ -1700,7 +1800,7 @@ function openDetail(kind, id) {
         </li>`).join('')}</ol></section>` : ''}
       <section class="block"><h4>客戶</h4><dl>${row('姓名', esc(r['客戶姓名']))}${row('原訂單客戶', esc(r['原訂單客戶']))}${row('電話', r['電話'] ? `<a class="tel" href="tel:${esc(r['電話'].replace(/[^\d+]/g, ''))}">${esc(r['電話'])}</a>` : '')}</dl></section>
       <section class="block"><h4>車籍資料</h4><dl>${row('車牌', esc(r['車牌']))}${row('廠牌', esc(r['廠牌']))}${row('車型', esc(r['車型']))}${row('年式', esc(r['年式']))}${row('顏色', esc(r['顏色']))}${row('等級', esc(r['等級']))}${kind === 'taxi' ? row('車身(引擎)號碼', esc(r['車身號碼'] || r['引擎號碼']), 'vin') : row('車身號碼', esc(r['車身號碼']), 'vin') + row('引擎號碼', esc(r['引擎號碼']), 'vin')}${row('領牌日', esc(r['領牌日']))}${row('交車日', esc(r['交車日']))}</dl><button class="btn" style="margin-top:12px" data-lic="${kind}:${esc(r.id)}">${r['車牌'] ? '拍行照重新填' : '拍行照填車牌'}</button></section>
-      ${r['訂單編號'] ? `<section class="block"><h4>原廠訂單</h4><dl>${row('訂單編號', esc(r['訂單編號']), 'vin')}${row('受訂日', esc(fmtD(r['受訂日'])))}${row('型號', esc(r['型號']))}${row('契約書號', esc(r['契約書號']), 'vin')}${row('訂約人', esc(r['訂約人']))}${row('使用人', esc(r['使用人']))}${row('合約配件', esc(fmtMoney(r['合約配件金額'])))}${row('原廠狀態', esc(r['原廠狀態']))}</dl></section>` : ''}
+      ${r['訂單編號'] ? `<section class="block"><h4>原廠訂單</h4><dl>${row('訂單編號', esc(r['訂單編號']), 'vin')}${row('受訂日', esc(fmtD(r['受訂日'])))}${row('型號', esc(r['型號']))}${row('契約書號', esc(r['契約書號']), 'vin')}${row('訂約人', esc(r['訂約人']))}${row('使用人', esc(r['使用人']))}${row('合約配件', esc(fmtMoney(r['合約配件金額'])))}${row('發票號碼', esc(r['發票號碼']), 'vin')}${row('發票金額', esc(fmtMoney(r['發票金額'])))}${row('原廠狀態', esc(r['原廠狀態']))}</dl></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>車款</h4>${payHtml(r, false)}</section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>要報趴數</h4>${pctCalc(r) && pctCalc(r).carPart > 0 ? `<div class="pct-line"><b>${esc(repFmt(pctCalc(r).rep))}</b><span>${esc(repNote(pctCalc(r).rep))}<br>總價 ${fmtMoney(r['總價'])}　車價 ${fmtMoney(r['車價'])}<br>配件成本 ${fmtMoney(r['配件成本']) || '$0'}　補貼息 ${fmtMoney(r['補貼息']) || '$0'}</span></div>` : '<p class="muted" style="margin:0 0 10px">還沒試算</p>'}<button class="btn" data-pct="${kind}:${esc(r.id)}">${pctCalc(r) ? '重新試算' : '試算這台的趴數'}</button></section>` : ''}
       ${kind !== 'taxi' ? `<section class="block"><h4>加裝配件</h4>${acc.length ? `<div class="tags">${acc.map(a => `<span class="tag">${esc(a)}</span>`).join('')}</div>` : '<span class="muted">尚未填寫</span>'}</section>

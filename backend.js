@@ -7,7 +7,7 @@
  * ⚠ 這個檔案是公開的：不要在這裡放任何密碼或個資。
  *   密碼（API_KEY）只放在 Apps Script 的 Code.gs 和 Google 的指令碼屬性裡。
  *****************************************************************/
-const BACKEND_VERSION = 'v31';   // 每次改後端就加 1
+const BACKEND_VERSION = 'v32';   // 每次改後端就加 1
 
 // API_KEY 由 Apps Script 裡的 Code.gs 傳進來；執行 setup 後會另外存起來。
 const KEY_PLACEHOLDER = '請改成你自己的密碼';
@@ -38,7 +38,8 @@ const FIELDS = [
   '額外配件已確認', '手冊已畫線', '溫馨提醒已寫', '名片已放',   // v7 新增（流程檢查項目）
   '總價', '車價', '配件成本', '補貼息', '趴數',   // v8 新增（趴數試算）
   '訂單編號', '受訂日', '型號', '契約書號', '訂約人', '使用人', '原廠狀態', '合約配件金額',   // v9 新增（原廠受訂報告匯入）
-  '原訂單客戶'   // v10 新增（行照車主和訂單客戶不同時，保留原本的名字）
+  '原訂單客戶',   // v10 新增（行照車主和訂單客戶不同時，保留原本的名字）
+  '發票號碼', '發票金額'   // v11 新增（交車報表 PSLT010）
 ];
 // 零用金分頁有自己的欄位
 const CASH_FIELDS = ['id', '日期', '類型', '分類', '項目', '金額', '備註', '建立時間', '更新時間'];
@@ -95,6 +96,7 @@ function doPost(e) {
       case 'list':    return out_({ ok: true, data: listAll_() });
       case 'save':    return out_({ ok: true, record: save_(p.sheet, p.record) });
       case 'bulk':    return out_(Object.assign({ ok: true }, bulk_(p.items || [])));
+      case 'saveMany': return out_({ ok: true, saved: saveMany_(p.items || []) });
       case 'delete':  remove_(p.sheet, p.id); return out_({ ok: true });
       case 'move':    return out_({ ok: true, record: move_(p.from, p.to, p.record) });
       case 'ocr':     return out_({ ok: true, text: ocr_(p.image, p.mime) });
@@ -179,6 +181,27 @@ function save_(key, rec) {
   if (!r) r = sh.getLastRow() + 1;
   sh.getRange(r, 1, 1, F.length).setNumberFormat('@').setValues([row]);
   return rec;
+}
+
+/** 一次更新很多筆已經存在的資料（匯入補資料用）：每張分頁只讀一次編號欄 */
+function saveMany_(items) {
+  const now = stamp_(); let n = 0;
+  const groups = {};
+  items.forEach(it => { if (SHEET[it.sheet] && it.record && it.record.id) (groups[it.sheet] = groups[it.sheet] || []).push(it.record); });
+  Object.keys(groups).forEach(key => {
+    const sh = sheet_(key); const F = fieldsOf_(key); ensureHeader_(sh, F);
+    const last = sh.getLastRow();
+    const ids = last >= 2 ? sh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0])) : [];
+    let next = last + 1;
+    groups[key].forEach(rec => {
+      rec = Object.assign({}, rec, { 更新時間: now });
+      const row = F.map(f => { const v = rec[f]; return v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v); });
+      const i = ids.indexOf(String(rec.id));
+      const r = i >= 0 ? i + 2 : next++;
+      sh.getRange(r, 1, 1, F.length).setNumberFormat('@').setValues([row]); n++;
+    });
+  });
+  return n;
 }
 
 /** 一次新增很多筆（匯入用）。同一張訂單（訂單編號）已經存在就略過。 */
